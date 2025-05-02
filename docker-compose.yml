@@ -65,15 +65,18 @@ services:
       retries: 10
   backend:
     # By default, Compose will pull image from Docker Hub when no local image found.
-    image: basicai/xtreme1-backend:v0.9.1
-    pull_policy: always
+    # image: basicai/xtreme1-backend:v0.9.1
+    # pull_policy: never
+
+    image: xtreme1-backend
+    pull_policy: never
     # Uncomment this line and comment previous line to build image locally, not pull from Docker Hub.
     # build: ./backend
     ports:
       - 8290:8080
-    # volumes:
+    volumes:
     # Using customized application.yml to override default configs.
-    #   - /host/path/to/customized/application.yml:/app/config/application.yml
+      - ./backend/src/main/resources/application.yml:/app/config/application.yml
     healthcheck:
       test:
         [
@@ -97,7 +100,7 @@ services:
   frontend:
     # By default, Compose will pull image from Docker Hub when no local image found.
     image: basicai/xtreme1-frontend:v0.9.1
-    pull_policy: always
+    pull_policy: never
     # Uncomment this line and comment previous line to build image locally, not pull from Docker Hub.
     # build: ./frontend
     ports:
@@ -112,24 +115,35 @@ services:
     pull_policy: always
     ports:
       - 8294:5000
-  image-object-detection:
-    image: basicai/xtreme1-image-object-detection
-    pull_policy: always
-    ports:
-      - 8292:5000
-    # You need to explicitly specify model profile to start this service.
-    profiles:
-      - model
-    runtime: nvidia
+  # image-object-detection:
+  #   image: basicai/xtreme1-image-object-detection
+  #   pull_policy: always
+  #   ports:
+  #     - 8292:5000
+  #   # You need to explicitly specify model profile to start this service.
+  #   profiles:
+  #     - model
+  #   runtime: nvidia
   point-cloud-object-detection:
-    image: basicai/xtreme1-point-cloud-object-detection
-    pull_policy: always
+    # image: basicai/xtreme1-point-cloud-object-detection
+    # pull_policy: never
+
+    image: nvidia/cuda:12.1.0-devel-ubuntu20.04-custom
+    pull_policy: never
+
+    #250331, ms3d test 
+    # image: ms3d_annos_docker_test:latest
+    # pull_policy: never
+
     ports:
       - 8293:5000
     # You need to explicitly specify model profile to start this service.
     profiles:
       - model
     runtime: nvidia
+    entrypoint: ["sh", "-c", "export PYTHONPATH=/home/MS3D-docker:$PYTHONPATH && cd /app/pcdet_open && python app.py ../cbgs_voxel0075_centerpoint_nds_6648.pth"]
+    # entrypoint: ["sh", "-c", "cd /app/pcdet_open && python app.py cfgs/waymo_pretrained/waymo_uda_voxel_rcnn_centerhead_4xyzt_allcls.pth"]
+    # entrypoint: ["python", "/app/pcdet_open/app.py", "../cbgs_voxel0075_centerpoint_nds_6648.pth"]
 volumes:
   mysql-data:
   redis-data:
