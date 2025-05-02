@@ -1,93 +1,221 @@
-# xtreme1
+<div align="center">
+<img width="386" alt="Xtreme1 logo" src="https://user-images.githubusercontent.com/84139543/190300943-98da7d5c-bd67-4074-a94f-b7405d29fb90.png">
 
+![](https://img.shields.io/badge/Release-v0.9.1-green) 
+![](https://img.shields.io/badge/License-Apache%202.0-blueviolet)
+[![Twitter](https://img.shields.io/badge/Follow-Twitter-blue)](https://twitter.com/Xtreme1io)
+[![Docs](https://img.shields.io/badge/Docs-Stable-success.svg?style=flat&longCache=true)](http://docs.xtreme1.io/) 
 
+[![Use Cloud for Free](https://basicai-asset.s3.amazonaws.com/docs/Open-source/Operation/App_Button.png)](https://app.basic.ai)
+</div>
 
-## Getting started
+# Intro
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+Xtreme1 is an all-in-one open-source platform for multimodal training data.
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+Xtreme1 unlocks efficiency in data annotation, curation, and ontology management for tackling machine learning challenges in computer vision and LLM. The platform's AI-fueled tools elevate your annotation to the next efficiency level, powering your projects in 2D/3D Object Detection, 2D/3D Semantic/Instance Segmentation, and LiDAR-Camera Fusion like never before.
 
-## Add your files
+A long-term free plan is offered in the Xtreme1 Cloud version. Click to [🎉 Use Cloud for Free](https://app.basic.ai).
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+The README document only includes content related to installation, building, and running, if you have any questions or doubts about features, you can always refer to our [Docs Site](https://docs.xtreme1.io/xtreme1-docs/).
 
+Find us on [Twitter](https://twitter.com/Xtreme1io) |  [Medium](https://medium.com/multisensory-data-training) | [Issues](https://github.com/xtreme1-io/xtreme1/issues) 
+
+# Key Features
+
+Image Annotation (B-box, Segmentation) - [YOLOR](https://github.com/WongKinYiu/yolor) & [RITM](https://github.com/saic-vul/ritm_interactive_segmentation) |  Lidar-camera Fusion Annotation - [OpenPCDet](https://github.com/open-mmlab/OpenPCDet) & [AB3DMOT](https://github.com/xinshuoweng/AB3DMOT)
+:-------------------------:|:-------------------------:
+![](/docs/images/image_ai.gif)  |  ![](/docs/images/3d_ai.gif)
+
+ :one: Supports data labeling for images, 3D LiDAR and 2D/3D Sensor Fusion datasets
+ 
+ :two: Built-in pre-labeling and interactive models support 2D/3D object detection, segmentation and classification
+ 
+ :three: Configurable Ontology Center for general classes (with hierarchies) and attributes for use in your model training
+
+ :four: Data management and quality monitoring
+ 
+ :five: Find labeling errors and fix them
+
+ :six: Model results visualization to help you evaluate your model
+ 
+ :seven: RLHF for Large Language Models :new: (beta version)
+
+Image Data Curation (Visualizing & Debug)  - [MobileNetV3](https://github.com/xiaolai-sqlai/mobilenetv3) & [openTSNE](https://github.com/pavlin-policar/openTSNE)  | RLHF Annotation Tool for LLM (beta version)
+:-------------------------:|:-------------------------:
+![](/docs/images/2d_v.gif) |  <img src="/docs/images/0.7rlhf.webp" width="640"> 
+
+# Install
+
+## Prerequisites
+
+*Operating System Requirements*
+
+Any OS can install the Xtreme1 platform with Docker Compose (installing [Docker Desktop](https://docs.docker.com/desktop/) on Mac, Windows, and Linux devices). On the Linux server, you can install Docker Engine with [Docker Compose Plugin](https://docs.docker.com/compose/install/linux/).
+
+*Hardware Requirements*
+
+**CPU**: AMD64 or ARM64  
+**RAM**: 2GB or higher  
+**Hard Drive**: 10GB+ free disk space (depends on data size)
+
+*Software Requirements*
+
+For Mac, Windows, and Linux with desktop.
+
+**Docker Desktop**: 4.1 or newer
+
+For Linux server.
+
+**Docker Engine**: 20.10 or newer  
+**Docker Compose Plugin**: 2.0 or newer
+
+*(Built-in) Models Deployment Requirements*
+
+The built-in model containers only can be running on Linux server with [NVIDIA CUDA Driver](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html) and [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/index.html).
+
+**GPU**: NVIDIA T4 or other similar GPU  
+**RAM**: 4G or higher
+
+## Install with Docker
+
+### Download Package
+
+Download the latest release package and unzip it.
+
+```bash
+wget https://github.com/xtreme1-io/xtreme1/releases/download/v0.9.1/xtreme1-v0.9.1.zip
+unzip -d xtreme1-v0.9.1 xtreme1-v0.9.1.zip
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/Howonjung/xtreme1.git
-git branch -M main
-git push -uf origin main
+
+### Start Services
+
+Enter into the release package directory, and execute the following command to start all services. It needs a few minutes to initialize database and prepare a test dataset.
+
+```bash
+cd xtreme1-v0.9.1
+docker compose up
 ```
 
-## Integrate with your tools
+Visit [http://localhost:8190](http://localhost:8190) in the browser (Google Chrome is recommended) to try out Xtreme1! You can replace localhost with IP address if you want to access from another machine.
 
-- [ ] [Set up project integrations](https://gitlab.com/Howonjung/xtreme1/-/settings/integrations)
+Docker compose will pull all service images from Docker Hub, including basic services `MySQL`, `Redis`, `MinIO`, and application services `backend`, `frontend`. You can find the username, password, hot binding port to access MySQL, Redis and MinIO in `docker-compose.yml`, for example you can access MinIO console at http://localhost:8194. We use Docker volume to save data, so you won't lose any data between container recreating.
 
-## Collaborate with your team
+Docker Compose advanced commands:
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+```bash
+# Start in the foreground.
+docker compose up
 
-## Test and Deploy
+# Or add -d option to run in the background.
+docker compose up -d
 
-Use the built-in continuous integration in GitLab.
+# When finished, you can start or stop all or specific services.
+docker compose start
+docker compose stop
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+# Stop all services and delete all containers, but data volumes will be kept.
+docker compose down
 
-***
+# Danger! Delete all volumes. All data in MySQL, Redis and MinIO. 
+docker compose down -v
+```
 
-# Editing this README
+### Start Built-in Models
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+You need to explicitly specify a model profile to enable model services.
 
-## Suggestions for a good README
+```bash
+docker compose --profile model up
+```
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+Make sure you have installed [NVIDIA CUDA Driver](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html) and [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/index.html) on host machine.
 
-## Name
-Choose a self-explaining name for your project.
+```bash
+# You need set "default-runtime" as "nvidia" in /etc/docker/daemon.json and restart docker to enable NVIDIA Container Toolkit
+{
+  "runtimes": {
+    "nvidia": {
+      "path": "nvidia-container-runtime",
+      "runtimeArgs": []
+    }
+  },
+  "default-runtime": "nvidia"
+}
+```
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+If you use **Docker Desktop** + **WSL2.0**, please find this [issue #144](https://github.com/xtreme1-io/xtreme1/issues/144) for your reference.
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+### Run on ARM CPU
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+Please note that certain Docker images, including `MySQL`, may not be compatible with the ARM architecture. In case your computer is based on an ARM CPU (e.g. Apple M1), you can create a Docker Compose override file called docker-compose.override.yml and include the following content. While this method uses QEMU emulation to enforce the use of the ARM64 image on the ARM64 platform, it may impact performance.
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+```yaml
+services:
+  mysql:
+    platform: linux/amd64
+```
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+## Install from Source
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+If you want to build or extend the function, download the source code and run locally.
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+### Enable Docker BuildKit
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+We are using Docker BuildKit to accelerate the building speed, such as cache Maven and NPM packages between builds. By default BuildKit is not enabled in Docker Desktop, you can enable it as follows. For more details, you can check the official document [Build images with BuildKit](https://docs.docker.com/develop/develop-images/build_enhancements/).
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+```bash
+# Set the environment variable to enable BuildKit just for once.
+DOCKER_BUILDKIT=1 docker build .
+DOCKER_BUILDKIT=1 docker compose up
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+# Or edit Docker daemon.json to enable BuildKit by default, the content can be something like '{ "features": { "buildkit": true } }'.
+vi /etc/docker/daemon.json
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+# You can clear the builder cache if you encounter some package version related problem.
+docker builder prune
+```
 
-## License
-For open source projects, say how it is licensed.
+### Clone Repository
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+```bash
+git clone https://github.com/basicai/xtreme1.git
+cd xtreme1
+```
+
+### Build Images and Run Services
+
+The `docker-compose.yml` default will pull application images from Docker Hub, if you want to build images from source code, you can comment on the service's image line and un-comment build line.
+
+```yaml
+services:
+  backend:
+    # image: basicai/xtreme1-backend
+    build: ./backend
+  frontend:
+    # image: basicai/xtreme1-frontend
+    build: ./frontend
+```
+
+Then when you run `docker compose up`, it will first build the `backend` and `frontend` image and start these services. Be sure to run `docker compose build` when code changes, as the up command will only build images when it does not exist.
+
+> You should not commit your change to `docker-compose.yml`, to avoid this, you can copy docker-compose.yml to a new file `docker-compose.develop.yml`, and modify this file as your development needs, as this file is already added into `.gitignore`. And you need to specify this specific file when running Docker Compose commands, such as `docker compose -f docker-compose.develop.yml build`.
+
+# License 
+This software is licensed under the Apache 2.0 LICENSE. Xtreme1 is a trademark of LF AI & Data Foundation.
+
+<img src="/docs/images/LFAI_DATA_horizontal-color.png" width="250">
+
+Xtreme1 is now hosted in [LF AI & Data Foundation](https://medium.com/multisensory-data-training/xtreme1-the-first-open-source-labeling-annotation-and-visualization-project-is-debuting-at-the-da1d157d1512) as the 1st open source data labeling annotation and visualization project.
+
+
+If Xtreme1 is part of your development process / project / publication, please cite us ❤️ :
+```bash
+@misc{Xtreme1,
+title = {Xtreme1 - The Next GEN Platform For Multisensory Training Data},
+year = {2023},
+note = {Software available from https://github.com/xtreme1-io/xtreme1/},
+url={https://xtreme1.io/},
+author = {LF AI & Data Foundation},
+}
+```
