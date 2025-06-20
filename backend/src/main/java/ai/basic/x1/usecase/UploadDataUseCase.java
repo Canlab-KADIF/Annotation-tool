@@ -68,6 +68,7 @@ import static ai.basic.x1.entity.enums.UploadStatusEnum.*;
 import static ai.basic.x1.usecase.exception.UsecaseCode.*;
 import static ai.basic.x1.util.Constants.*;
 
+import org.apache.commons.lang3.tuple.Pair;
 @Slf4j
 public class UploadDataUseCase {
 
@@ -520,7 +521,7 @@ public class UploadDataUseCase {
                         this.saveBatchDataResult(resDataInfoList, dataAnnotationObjectBOList);
                     }
                 } catch (Exception e) {
-                    log.error("Handle data error", e);
+                    log.error("commonParseUploadFile ", e);
                 } finally {
                     parsedDataNum.set(parsedDataNum.get() + subDataNameList.size());
                     var uploadRecordBO = uploadRecordBOBuilder.parsedDataNum(parsedDataNum.get()).build();
@@ -652,23 +653,34 @@ public class UploadDataUseCase {
      * @param dataAnnotationObjectBOList Data annotation object list
      */
     public void handleDataResult(File file, String dataName, DataAnnotationObjectBO dataAnnotationObjectBO,
-                                 List<DataAnnotationObjectBO> dataAnnotationObjectBOList, StringBuilder errorBuilder) {
+                                List<DataAnnotationObjectBO> dataAnnotationObjectBOList, StringBuilder errorBuilder) {
 
-        // Indicates that no result data was imported
-        if (ObjectUtil.isNotNull(dataAnnotationObjectBO.getSourceId())) {
+        // GT와 ROS 경로들 정의
+        List<Pair<String, DataAnnotationObjectSourceTypeEnum>> resultSources = List.of(
+            Pair.of("result", DataAnnotationObjectSourceTypeEnum.MODEL),
+            Pair.of("perception", DataAnnotationObjectSourceTypeEnum.ROS)
+        );
+        for (var source : resultSources) {
+            String folderName = source.getLeft();
+            DataAnnotationObjectSourceTypeEnum sourceType = source.getRight();
+
             var resultFile = FileUtil.loopFiles(file, 2, null).stream()
-                    .filter(fc -> fc.getName().toUpperCase().endsWith(JSON_SUFFIX) && dataName.equals(FileUtil.getPrefix(fc))
-                            && fc.getParentFile().getName().equalsIgnoreCase(RESULT)).findFirst();
+                    .filter(fc -> fc.getName().toUpperCase().endsWith(JSON_SUFFIX)
+                            && dataName.equals(FileUtil.getPrefix(fc))
+                            && fc.getParentFile().getName().equalsIgnoreCase(folderName))
+                    .findFirst();
+
             if (resultFile.isPresent()) {
-                log.info("dataResult,dataName:{},resultFileName:{}",dataName,resultFile.get().getName());
+                log.info("dataResult[{}], dataName:{}, resultFileName:{}", sourceType.name(), dataName, resultFile.get().getName());
                 try {
                     var resultJson = JSONUtil.readJSON(resultFile.get(), Charset.defaultCharset());
                     var result = new DataImportResultBO();
                     if (resultJson instanceof JSONArray) {
                         var dataImportResultBOList = JSONUtil.toList(JSONUtil.toJsonStr(resultJson), DataImportResultBO.class);
                         var objects = new ArrayList<DataAnnotationResultObjectBO>();
-                        dataImportResultBOList.stream().filter(dataImportResultBO -> CollUtil.isNotEmpty(dataImportResultBO.getObjects())).forEach(dataImportResultBO ->
-                                objects.addAll(dataImportResultBO.getObjects()));
+                        dataImportResultBOList.stream()
+                                .filter(dataImportResultBO -> CollUtil.isNotEmpty(dataImportResultBO.getObjects()))
+                                .forEach(dataImportResultBO -> objects.addAll(dataImportResultBO.getObjects()));
                         result.setObjects(objects);
                     } else {
                         result = JSONUtil.toBean(JSONUtil.toJsonStr(resultJson), DataImportResultBO.class);
@@ -677,16 +689,19 @@ public class UploadDataUseCase {
                     this.verifyDataResult(result, dataAnnotationObjectBO.getDataId(), dataName, errorBuilder);
                     var classMap = getClassMap(dataAnnotationObjectBO.getDatasetId(), result.getObjects());
                     result.getObjects().forEach(object -> {
-                        var insertDataAnnotationObjectBO = DefaultConverter.convert(dataAnnotationObjectBO, DataAnnotationObjectBO.class);
+                        var insertBO = DefaultConverter.convert(dataAnnotationObjectBO, DataAnnotationObjectBO.class);
                         object.setId(IdUtil.fastSimpleUUID());
                         object.setVersion(0);
                         processClassAttributes(classMap, object);
-                        Objects.requireNonNull(insertDataAnnotationObjectBO).setClassAttributes(JSONUtil.parseObj(object));
-                        insertDataAnnotationObjectBO.setClassId(object.getClassId());
-                        dataAnnotationObjectBOList.add(insertDataAnnotationObjectBO);
+                        insertBO.setClassAttributes(JSONUtil.parseObj(object));
+                        insertBO.setClassId(object.getClassId());
+                        insertBO.setSourceType(sourceType); // sourceType 지정 (GT or ROS)
+                        dataAnnotationObjectBOList.add(insertBO);
                     });
+
                 } catch (Exception e) {
-                    log.error("Handle result json error,userId:{},datasetId:{}", dataAnnotationObjectBO.getCreatedBy(), dataAnnotationObjectBO.getDatasetId(), e);
+                    log.error("Handle result json error ({}), userId:{}, datasetId:{}", sourceType.name(),
+                            dataAnnotationObjectBO.getCreatedBy(), dataAnnotationObjectBO.getDatasetId(), e);
                 }
             }
         }

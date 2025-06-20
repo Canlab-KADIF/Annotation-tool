@@ -53,6 +53,10 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
+import java.util.regex.*;
+
+import java.io.InputStream;
+import cn.hutool.http.HttpRequest;
 
 /**
  * @author fyb
@@ -200,22 +204,83 @@ public class ExportUseCase {
             var sceneName = dataExportBO.getSceneName();
             var zipPath = StrUtil.isNotEmpty(sceneName) ? String.format("%s/%s", zipPathOr, sceneName) : zipPathOr;
             var dataExportBaseBO = dataExportBO.getData();
-            if (dataExportBaseBO instanceof ImageDataExportBO && DataFormatEnum.COCO.equals(query.getDataFormat())) {
-                var imageDataExportBO = DefaultConverter.convert(dataExportBaseBO, ImageDataExportBO.class);
-                try {
-                    downLoadRawFile(zipPath, imageDataExportBO.getImages(), imageDataExportBO.getName());
-                } catch (Exception e) {
-                    logger.error("Download object error", e);
+            log.info("===========================================================================");
+            log.info("dataExportBaseBO.getType: {}", dataExportBaseBO.getType());
+            log.info("[EXPORT DEBUG] getData JSON: {}", JSONUtil.toJsonStr(dataExportBaseBO, jsonConfig));
+            log.info("===========================================================================");
+
+            // LIDAR_BASIC 또는 LIDAR_FUSION 타입일 때 .pcd 파일 다운로드
+            if ("LIDAR_FUSION".equals(dataExportBaseBO.getType())) {
+                var lidarFusionData = DefaultConverter.convert(dataExportBaseBO, LidarFusionDataExportBO.class);
+                var lidarPointClouds = lidarFusionData.getLidarPointClouds();
+                var cameraImages = lidarFusionData.getCameraImages();
+                var cameraConfig = lidarFusionData.getCameraConfig();
+                // lidar pcd file
+                if (CollUtil.isNotEmpty(lidarPointClouds)) {
+                    for (ExportDataLidarPointCloudFileBO pcdFile : lidarPointClouds) {
+                        try (InputStream inputStream = HttpRequest.get(pcdFile.getUrl()).execute().bodyStream()) {
+                            String fullPcdPath = String.format("%s/%s/%s/%s", zipPath, Constants.DATA, Constants.LIDAR_POINT_CLOUD, pcdFile.getFilename());
+                            log.info("fullPcdPath: {}", fullPcdPath);
+                            File file = new File(fullPcdPath);
+                            FileUtil.mkdir(file.getParentFile());
+                            FileUtil.writeFromStream(inputStream, file);
+                        } catch (Exception e) {
+                            log.error("Failed to download PCD file: {}", pcdFile.getUrl(), e);
+                        }
+                    }
                 }
+                // camera jpeg file
+                if (CollUtil.isNotEmpty(cameraImages)) {
+                    for (ExportDataImageFileBO imageFile : cameraImages) {
+                        try (InputStream inputStream = HttpRequest.get(imageFile.getUrl()).execute().bodyStream()) {
+                            // 
+                            Pattern pattern = Pattern.compile("camera_image_\\d+");
+                            Matcher matcher = pattern.matcher(imageFile.getZipPath());
+                            String cameraDir;
+                            if (matcher.find()) {
+                                cameraDir = matcher.group(); // 예: "camera_image_1"
+                            } else {
+                                cameraDir = Constants.CAMERA_IMAGE;
+                            }
+                            log.info("cam dir: {} ", cameraDir);
+                            String fullImagePath = String.format("%s/%s/%s/%s", zipPath, Constants.DATA, cameraDir, imageFile.getFilename());
+                            log.info("full ImagePath: {}", fullImagePath);
+                            File file = new File(fullImagePath);
+                            FileUtil.mkdir(file.getParentFile());
+                            FileUtil.writeFromStream(inputStream, file);
+                        } catch (Exception e) {
+                            log.error("Failed to download image file: {}", imageFile.getUrl(), e);
+                        }
+                    }
+                }
+
+                // camera calibration file
+                if (cameraConfig != null) {
+                    // for (ExportDataImageFileBO cameraConfigFile : cameraConfigs) {
+                    try (InputStream inputStream = HttpRequest.get(cameraConfig.getUrl()).execute().bodyStream()) {
+                        String cameraConfigFilePath = String.format("%s/%s/%s/%s", zipPath, Constants.DATA, Constants.CAMERA_CONFIG, cameraConfig.getFilename());
+                        log.info("CameraConfigFilePath: {}", cameraConfigFilePath);
+                        File file = new File(cameraConfigFilePath);
+                        FileUtil.mkdir(file.getParentFile());
+                        FileUtil.writeFromStream(inputStream, file);
+                    } catch (Exception e) {
+                        log.error("Failed to download image file: {}", e);
+                    }
+                    // }
+                }
+
             }
-            var dataPath = String.format("%s/%s/%s.json", zipPath, Constants.DATA,
-                    dataExportBaseBO.getName());
-            FileUtil.writeString(JSONUtil.toJsonStr(dataExportBaseBO, jsonConfig), dataPath, StandardCharsets.UTF_8);
+
             if (ObjectUtil.isNotNull(dataExportBO.getResult())) {
-                var resultPath = String.format("%s/%s/%s.json", zipPath,
-                        Constants.RESULT,
-                        dataExportBaseBO.getName());
-                FileUtil.writeString(JSONUtil.toJsonStr(dataExportBO.getResult(), jsonConfig), resultPath, StandardCharsets.UTF_8);
+                for (DataResultExportBO resultBO : dataExportBO.getResult()) {
+                    var sourceName = resultBO.getSourceName(); // e.g. "ROS", "MODEL", "GROUND_TRUTH"
+                    var resultPath = String.format("%s/%s/%s/%s.json",
+                            zipPath,
+                            Constants.RESULT,
+                            sourceName != null ? sourceName : "UNKNOWN",
+                            dataExportBaseBO.getName());
+                    FileUtil.writeString(JSONUtil.toJsonStr(resultBO, jsonConfig), resultPath, StandardCharsets.UTF_8);
+                }
             }
         });
     }

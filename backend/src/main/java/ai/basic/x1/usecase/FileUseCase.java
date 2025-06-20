@@ -7,6 +7,7 @@ import ai.basic.x1.entity.FileBO;
 import ai.basic.x1.entity.RelationFileBO;
 import ai.basic.x1.usecase.exception.UsecaseException;
 import ai.basic.x1.util.DefaultConverter;
+import ai.basic.x1.util.Constants;
 import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.util.ByteUtil;
 import cn.hutool.crypto.SecureUtil;
@@ -20,6 +21,11 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+import org.springframework.dao.DuplicateKeyException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Set;
+import java.util.ArrayList;
+
 /**
  * @author : fyb
  */
@@ -31,6 +37,8 @@ public class FileUseCase {
 
     @Autowired
     private MinioService minioService;
+
+    private static final Set<Long> GTDataHashSet = ConcurrentHashMap.newKeySet();
 
     /**
      * fileId
@@ -97,15 +105,29 @@ public class FileUseCase {
     @Transactional(rollbackFor = Throwable.class)
     public List<FileBO> saveBatchFile(Long userId, List<FileBO> fileBOS) {
         var files = DefaultConverter.convert(fileBOS, File.class);
-        Objects.requireNonNull(files).forEach(file -> {
-            file.setPathHash(ByteUtil.bytesToLong(SecureUtil.md5().digest(file.getPath())));
+        List<File> uniqueFiles = new ArrayList<>();
+        OffsetDateTime now = OffsetDateTime.now();
+        log.info("====================================");
+        for (File file : Objects.requireNonNull(files)) {
+            String filename = file.getName();
+            boolean isRosPerceptionJson = filename.contains(Constants.ROS_PERCEPTION_DATA) &&
+                           filename.endsWith(Constants.JSON_SUFFIX.toLowerCase());            
+            // log.info("file name, isRosPerceptionJson: {}, {}", filename, isRosPerceptionJson);
+            long pathHash = ByteUtil.bytesToLong(SecureUtil.md5().digest(file.getPath()));
+            if (isRosPerceptionJson && !GTDataHashSet.add(pathHash)){
+                continue;
+            }
+            file.setPathHash(pathHash);
             file.setCreatedBy(userId);
-            file.setCreatedAt(OffsetDateTime.now());
+            file.setCreatedAt(now);
             file.setUpdatedBy(userId);
-            file.setUpdatedAt(OffsetDateTime.now());
-        });
-        fileDAO.saveBatch(files);
-        var reFileBOs = DefaultConverter.convert(files, FileBO.class);
+            file.setUpdatedAt(now);
+            uniqueFiles.add(file);
+        }
+        fileDAO.saveBatch(uniqueFiles);
+        log.info("====================================");
+        log.info("fileDAO.saveBatch completed");
+        var reFileBOs = DefaultConverter.convert(uniqueFiles, FileBO.class);
         reFileBOs.forEach(fileBO -> setUrl(fileBO));
         return reFileBOs;
     }

@@ -61,6 +61,8 @@ public class PointCloudDetectionModelReqConverter {
             //pcd
             if (prePath.startsWith(LIDAR_POINT_CLOUD)) {
                 dataInfo.setPointCloudUrl(getFileBO(fileNodeBO.getFile()).getUrl());
+                dataInfo.setPointCloudUrl(getFileBO(fileNodeBO.getFile()).getInternalUrl());
+                // dataInfo.setPointCloudUrl(getFileBO(fileNodeBO.getFile()).getUrl());
             }
             //cameraConfig
             if (prePath.startsWith(CAMERA_CONFIG)) {
