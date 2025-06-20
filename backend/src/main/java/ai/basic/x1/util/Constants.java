@@ -111,6 +111,10 @@ public interface Constants {
     /**
      * image
      */
+
+    String ROS_PERCEPTION_DATA = "perception";
+    
+
     String TEXT = "text";
 
     String RESULT = "result";

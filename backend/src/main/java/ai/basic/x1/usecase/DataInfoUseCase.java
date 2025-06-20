@@ -903,8 +903,8 @@ public class DataInfoUseCase {
             var objectList = dataAnnotationObjectMap.get(dataId);
             var dataResultExportBOList = new ArrayList<DataResultExportBO>();
             if (CollectionUtil.isNotEmpty(objectList)) {
-                var objectSourceMap = objectList.stream().collect(Collectors.groupingBy(DataAnnotationObjectBO::getSourceId));
-                objectSourceMap.forEach((sourceId, objectSourceList) -> {
+                var objectBySourceType = objectList.stream().collect(Collectors.groupingBy(DataAnnotationObjectBO::getSourceType));
+                objectBySourceType.forEach((sourceType, objectSourceList) -> {
                     var dataResultExportBO = DataResultExportBO.builder().dataId(dataId).version(version).build();
                     var objects = new ArrayList<DataResultObjectExportBO>();
                     objectSourceList.forEach(o -> {
@@ -914,14 +914,15 @@ public class DataInfoUseCase {
                         objects.add(dataResultObjectExportBO);
                     });
                     dataResultExportBO.setObjects(objects);
-                    dataResultExportBO.setSourceName(resultMap.get(sourceId));
+                    // dataResultExportBO.setSourceName(resultMap.get(sourceType));
+                    dataResultExportBO.setSourceName(sourceType.name());
 
-                    if (GROUND_TRUTH.equals(sourceId)) {
-                        if (CollectionUtil.isNotEmpty(annotationList)) {
-                            var classificationAttributes = annotationList.stream().map(DataAnnotationClassificationBO::getClassificationAttributes).collect(Collectors.toList());
-                            dataResultExportBO.setClassificationValues(JSONUtil.parseArray(classificationAttributes));
-                        }
-                    }
+                    // if (GROUND_TRUTH.equals(sourceType)) {
+                    //     if (CollectionUtil.isNotEmpty(annotationList)) {
+                    //         var classificationAttributes = annotationList.stream().map(DataAnnotationClassificationBO::getClassificationAttributes).collect(Collectors.toList());
+                    //         dataResultExportBO.setClassificationValues(JSONUtil.parseArray(classificationAttributes));
+                    //     }
+                    // }
                     dataResultExportBOList.add(dataResultExportBO);
                 });
 
