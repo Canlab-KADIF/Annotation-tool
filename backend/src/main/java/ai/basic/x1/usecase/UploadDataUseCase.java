@@ -156,7 +156,7 @@ public class UploadDataUseCase {
      */
     @Transactional(rollbackFor = RuntimeException.class)
     public Long upload(DataInfoUploadBO dataInfoUploadBO) {
-        var uploadRecordBO = uploadUseCase.createUploadRecord(dataInfoUploadBO.getFileUrl());
+        var uploadRecordBO = uploadUseCase.createUploadRecord(dataInfoUploadBO.getFileUrl(), dataInfoUploadBO.getDatasetId());
         var boo = DecompressionFileUtils.validateUrl(dataInfoUploadBO.getFileUrl());
         if (!boo) {
             uploadUseCase.updateUploadRecordStatus(uploadRecordBO.getId(), FAILED, DATASET_DATA_FILE_URL_ERROR.getMessage());

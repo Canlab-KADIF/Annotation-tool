@@ -23,6 +23,8 @@ public class ExportRecord {
     @TableId(type = IdType.AUTO)
     private Long id;
 
+    private Long datasetId;
+
     /**
      * Serial number
      */

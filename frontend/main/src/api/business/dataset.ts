@@ -261,6 +261,12 @@ export const takeRecordByDataModel = (params: takeRecordParams) =>
     },
   });
 
+export const downloadOriginalZip = (datasetId: string) =>
+  defHttp.get<ApiResult<string[]>>({
+    url: `${Api.DATA}/downloadOriginalZip`,
+    params: { datasetId },
+  });
+
 export const exportData = (params: any) =>
   defHttp.get<null>({
     url: `${Api.DATA}/export`,

@@ -41,6 +41,12 @@ import java.util.stream.Collectors;
 import static ai.basic.x1.entity.enums.DatasetTypeEnum.IMAGE;
 import static ai.basic.x1.util.Constants.PAGE_SIZE_100;
 
+import ai.basic.x1.adapter.port.dao.FileDAO;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
+import cn.hutool.core.collection.CollUtil;
+
 /**
  * @author fyb
  * @date 2022/2/16 15:03
@@ -88,8 +94,22 @@ public class DatasetUseCase {
     @Autowired
     private DataAnnotationClassificationDAO dataAnnotationClassificationDAO;
 
+    @Autowired
+    private DataAnnotationRecordDAO dataAnnotationRecordDAO;
+
+    @Autowired
+    private UploadRecordDAO uploadRecordDAO;
+    
+    @Autowired
+    private ExportRecordDAO exportRecordDAO;
+
     @Value("${file.tempPath:/tmp/xtreme1/}")
     private String tempPath;
+
+    @Autowired 
+    private FileDAO fileDAO;
+    @Autowired
+    private FileUseCase fileUseCase;
 
     private static final ExecutorService executorService = ThreadUtil.newExecutor(1);
 

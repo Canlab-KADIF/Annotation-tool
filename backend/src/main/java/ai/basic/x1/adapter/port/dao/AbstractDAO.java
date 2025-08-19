@@ -32,6 +32,8 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import com.baomidou.mybatisplus.core.toolkit.support.SFunction;
+
 /**
  * @author Jagger Wang
  */
@@ -75,6 +77,12 @@ public abstract class AbstractDAO<M extends BaseMapper<T>, T> {
         return (Class<T>) ReflectionKit.getSuperClassGenericType(this.getClass(), AbstractDAO.class, 1);
     }
 
+
+    public List<T> findAllByField(SFunction<T, ?> fieldGetter, Object value) {
+        return this.lambdaQuery()
+                .eq(fieldGetter, value)
+                .list();
+    }
 
     /**
      * batch sql SqlSession

@@ -514,8 +514,8 @@ public class DataInfoUseCase {
      */
     public Long export(DataInfoQueryBO dataInfoQueryBO) {
         var dataset = datasetDAO.getById(dataInfoQueryBO.getDatasetId());
-        var fileName = String.format("%s-%s.zip", dataset.getName(), TemporalAccessorUtil.format(OffsetDateTime.now(), DatePattern.PURE_DATETIME_PATTERN));
-        var serialNumber = exportUseCase.createExportRecord(fileName);
+        var fileName = String.format("%s-%s.tar", dataset.getName(), TemporalAccessorUtil.format(OffsetDateTime.now(), DatePattern.PURE_DATETIME_PATTERN));
+        var serialNumber = exportUseCase.createExportRecord(fileName, dataInfoQueryBO.getDatasetId());
         dataInfoQueryBO.setPageNo(PAGE_NO);
         dataInfoQueryBO.setPageSize(PAGE_SIZE);
         dataInfoQueryBO.setDatasetType(dataset.getType());
@@ -873,6 +873,10 @@ public class DataInfoUseCase {
         return fileIds;
     }
 
+    public List<Long> collectFileIds(List<DataInfoBO.FileNodeBO> content) {
+        return getFileIds(content);
+    }
+
     /**
      * Data process
      *
@@ -1045,7 +1049,7 @@ public class DataInfoUseCase {
      */
     public Long scenarioExport(ScenarioQueryBO scenarioQueryBO) {
         var fileName = String.format("%s-%s.zip", "export", TemporalAccessorUtil.format(OffsetDateTime.now(), DatePattern.PURE_DATETIME_PATTERN));
-        var serialNumber = exportUseCase.createExportRecord(fileName);
+        var serialNumber = exportUseCase.createExportRecord(fileName, scenarioQueryBO.getDatasetId());
         scenarioQueryBO.setPageNo(PAGE_NO);
         scenarioQueryBO.setPageSize(PAGE_SIZE_100);
         var datasetClassBOList = datasetClassUseCase.findByIds(scenarioQueryBO.getDatasetId(), scenarioQueryBO.getClassIds());
