@@ -315,6 +315,7 @@ DROP TABLE IF EXISTS `export_record`;
 CREATE TABLE `export_record`
 (
     `id`            bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'Primary key',
+    `dataset_id`    bigint(20)                                                                                     DEFAULT NULL COMMENT 'Dataset id',
     `serial_number` bigint(40) NOT NULL COMMENT 'Serial number',
     `file_id`       bigint(20)                                                                                     DEFAULT NULL COMMENT 'File id',
     `file_name`     varchar(100)                                                                                   DEFAULT NULL COMMENT 'File name',
