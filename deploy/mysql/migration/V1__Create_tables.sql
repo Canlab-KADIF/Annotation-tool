@@ -106,7 +106,7 @@ CREATE TABLE `data_annotation_object`
     `data_id`          bigint(20)                            DEFAULT NULL COMMENT 'Data ID',
     `class_id`         bigint(20)                            DEFAULT NULL COMMENT 'Class ID',
     `class_attributes` json                                  DEFAULT NULL COMMENT 'Class Attributes',
-    `source_type`      enum ('DATA_FLOW','IMPORTED','MODEL') DEFAULT 'DATA_FLOW' COMMENT 'Source type',
+    `source_type` enum ('DATA_FLOW','IMPORTED','MODEL','ROS') DEFAULT 'DATA_FLOW' COMMENT 'Source type',
     `source_id`        bigint(20)                            DEFAULT '-1' COMMENT 'Source ID',
     `created_at`       datetime                              DEFAULT CURRENT_TIMESTAMP COMMENT 'Create time',
     `created_by`       bigint(20)                            DEFAULT NULL COMMENT 'Creator id',
@@ -516,6 +516,7 @@ DROP TABLE IF EXISTS `upload_record`;
 CREATE TABLE `upload_record`
 (
     `id`                   bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'Primary key',
+    `dataset_id`           bigint(20)                                                                      DEFAULT NULL COMMENT 'Dataset id',
     `serial_number`        bigint(40) NOT NULL COMMENT 'Serial number',
     `file_url`             varchar(1000)                                                                              DEFAULT NULL COMMENT 'File url',
     `file_name`            varchar(255)                                                                               DEFAULT NULL COMMENT 'File name',
