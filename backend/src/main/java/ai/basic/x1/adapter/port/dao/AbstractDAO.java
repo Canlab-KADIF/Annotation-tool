@@ -280,9 +280,8 @@ public abstract class AbstractDAO<M extends BaseMapper<T>, T> {
 
     public boolean removeById(Serializable id) {
         // logical delete method
-        TableInfo tableInfo = TableInfoHelper.getTableInfo(getEntityClass());
-        log.warn("isWithLogicDelete: " + tableInfo.isWithLogicDelete());
-        log.warn("removeById func 실행 dataset id: " + id);
+        // TableInfo tableInfo = TableInfoHelper.getTableInfo(getEntityClass());
+        // log.warn("isWithLogicDelete: " + tableInfo.isWithLogicDelete());
         return SqlHelper.retBool(getBaseMapper().deleteById(id));
     }
 

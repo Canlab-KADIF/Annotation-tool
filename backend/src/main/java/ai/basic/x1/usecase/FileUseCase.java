@@ -26,6 +26,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.Set;
 import java.util.ArrayList;
 
+import cn.hutool.core.collection.CollUtil;
+
 /**
  * @author : fyb
  */
@@ -61,6 +63,13 @@ public class FileUseCase {
         return fileBO;
     }
 
+    
+    public List<FileBO> findRelatedFilesByRelationIds(List<Long> relationIds) {
+        var files = fileDAO.lambdaQuery().in(File::getRelationId, relationIds).list();
+        return DefaultConverter.convert(files, FileBO.class);
+    }
+
+
     /**
      * file object list
      *
@@ -85,6 +94,40 @@ public class FileUseCase {
         return fileBOs;
     }
 
+    public void deleteByUrls(List<String> fileUrls) {
+        if (CollUtil.isEmpty(fileUrls)) {
+            return;
+        }
+        for (var fileUrl : fileUrls) {
+            try {
+                log.info("deleting fileUrl: {} ", fileUrl);
+                minioService.removeObject(fileUrl);
+            } catch (Exception e) {
+                log.warn("Failed to delete fileUrl from MinIO: {}", fileUrl, e);
+            }
+        }
+    }
+
+    public void deleteByIds(List<Long> fileIds) {
+        log.info("fileIds: {}", fileIds);
+        if (CollUtil.isEmpty(fileIds)) {
+            return;
+        }
+
+        var files = fileDAO.listByIds(fileIds); // 실제 파일 정보 조회
+
+        for (var file : files) {
+            try {
+                // log.info("deleting file path: {} ", file.getPath());
+                minioService.removeObject(file.getPath());
+            } catch (Exception e) {
+                log.warn("Failed to delete file from MinIO: {}", file.getPath(), e);
+            }
+        }
+
+        fileDAO.removeByIds(fileIds); // file 테이블 삭제
+        log.info("DB에서 file 레코드 {}개 삭제 완료", fileIds.size());
+    }
 
     private void setUrl(FileBO fileBO) {
         try {

@@ -113,12 +113,16 @@
         ,d.id ASC
     </sql>
 
-    <delete id="deleteById">
+    <!-- <delete id="deleteById">
         update data set del_unique_key = id, is_deleted = true where id = #{id}
-    </delete>
+    </delete> -->
+
+    <!-- <delete id="deleteByDatasetId">
+        update data set del_unique_key = id, is_deleted = true where dataset_id = #{datasetId}
+    </delete> -->
 
     <delete id="deleteByDatasetId">
-        update data set del_unique_key = id, is_deleted = true where dataset_id = #{datasetId}
+        delete from data where dataset_id = #{datasetId}
     </delete>
 
     <select id="selectFirstDataIdBySceneIds" resultType="java.lang.Long">
