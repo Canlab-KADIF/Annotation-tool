@@ -144,6 +144,21 @@ services:
     entrypoint: ["sh", "-c", "export PYTHONPATH=/home/MS3D-docker:$PYTHONPATH && cd /app/pcdet_open && python app.py ../cbgs_voxel0075_centerpoint_nds_6648.pth"]
     # entrypoint: ["sh", "-c", "cd /app/pcdet_open && python app.py cfgs/waymo_pretrained/waymo_uda_voxel_rcnn_centerhead_4xyzt_allcls.pth"]
     # entrypoint: ["python", "/app/pcdet_open/app.py", "../cbgs_voxel0075_centerpoint_nds_6648.pth"]
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin
+    restart: always
+    ports:
+      - 8195:80  # http://localhost:8195 로 접속 가능
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: ImOxO8Lz
+    depends_on:
+      mysql:
+        condition: service_healthy
+
 volumes:
   mysql-data:
   redis-data:
