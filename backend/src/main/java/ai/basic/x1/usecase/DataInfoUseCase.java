@@ -114,6 +114,12 @@ public class DataInfoUseCase {
     @Autowired
     private ModelRunRecordUseCase modelRunRecordUseCase;
 
+    @Autowired
+    private ExportRecordDAO exportRecordDAO;
+
+    @Autowired
+    private UploadRecordDAO uploadRecordDAO;
+
     @Value("${export.data.version}")
     private String version;
 
@@ -226,26 +232,117 @@ public class DataInfoUseCase {
         if (count > 0) {
             throw new UsecaseException(UsecaseCode.DATASET_DATA_OTHERS_ANNOTATING);
         }
+        var dataset = datasetDAO.getById(datasetId);
+        var dataInfoQueryBO = new DataInfoQueryBO();
+        dataInfoQueryBO.setDatasetId(datasetId);
+        dataInfoQueryBO.setPageNo(1);
+        dataInfoQueryBO.setPageSize(Integer.MAX_VALUE);
+        dataInfoQueryBO.setDatasetType(dataset.getType());
+        List<Long> dataIds = findExportDataIds(dataInfoQueryBO);
+        log.info("deleteBatch ids3: {}", dataIds);
+        // a. DataInfo content에서 파일 수집 후 삭제
+        List<Long> originalFileIds = new ArrayList<>();
+        for (Long dataId : dataIds) {
+            try {
+                var dataInfo = findById(dataId);
+                var content = dataInfo.getContent();
+                if (CollectionUtil.isNotEmpty(content)) {
+                    var file_ids = collectFileIds(content);
+                    originalFileIds.addAll(file_ids);
+                } else {
+                    log.info("Content is empty for dataId: {}", dataId);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to load dataInfo for dataId: {}", dataId, e);
+            }
+        }
+        
+        // log.info("originalFileIds1: {}: ", originalFileIds);
+        List<Long> relatedFileIds = new ArrayList<>();
+        // originalFileIds가 비어있지 않은 경우에만 관련 파일 조회
+        if (CollUtil.isNotEmpty(originalFileIds)) {
+            List<FileBO> relatedFiles = fileUseCase.findRelatedFilesByRelationIds(originalFileIds);
+            relatedFileIds = relatedFiles.stream()
+                                            .map(FileBO::getId)
+                                            .collect(Collectors.toList());
+        }
 
-        var dataInfoLambdaUpdateWrapper = Wrappers.lambdaUpdate(DataInfo.class);
-        dataInfoLambdaUpdateWrapper.setSql("del_unique_key=id,is_deleted=1");
-        dataInfoLambdaUpdateWrapper.eq(DataInfo::getDatasetId, datasetId);
-        dataInfoLambdaUpdateWrapper.nested(wq -> wq.in(DataInfo::getId, ids)
-                .or()
-                .in(DataInfo::getParentId, ids));
-        dataInfoDAO.update(dataInfoLambdaUpdateWrapper);
+        // export_record 및 실제 생성된 zip파일 모두 삭제
+        List<ExportRecord> exportRecords = exportRecordDAO.findAllByDatasetId(datasetId);
+        List<Long> exportFileIds = exportRecords.stream()
+                        .map(ExportRecord::getFileId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList());
 
-        executorService.execute(Objects.requireNonNull(TtlRunnable.get(() -> {
-            var dataAnnotationObjectLambdaUpdateWrapper = Wrappers.lambdaUpdate(DataAnnotationObject.class);
-            dataAnnotationObjectLambdaUpdateWrapper.eq(DataAnnotationObject::getDatasetId, datasetId);
-            dataAnnotationObjectLambdaUpdateWrapper.in(DataAnnotationObject::getDataId, ids);
-            dataAnnotationObjectDAO.remove(dataAnnotationObjectLambdaUpdateWrapper);
-            var dataAnnotationClassificationLambdaUpdateWrapper = Wrappers.lambdaUpdate(DataAnnotationClassification.class);
-            dataAnnotationClassificationLambdaUpdateWrapper.eq(DataAnnotationClassification::getDatasetId, datasetId);
-            dataAnnotationClassificationLambdaUpdateWrapper.in(DataAnnotationClassification::getDataId, ids);
-            dataAnnotationClassificationDAO.remove(dataAnnotationClassificationLambdaUpdateWrapper);
-            datasetSimilarityJobUseCase.submitJob(datasetId);
-        })));
+        var allFileIds = new ArrayList<Long>();
+        allFileIds.addAll(originalFileIds);
+        allFileIds.addAll(relatedFileIds);
+        allFileIds.addAll(exportFileIds);
+
+        // 중복 제거
+        Set<Long> uniqueFileIds = new HashSet<>(allFileIds);
+        allFileIds = new ArrayList<>(uniqueFileIds);
+        List<Long> finalAllFileIds = allFileIds;
+        // log.info("finalAllFileIds: {} ", finalAllFileIds);
+                                        
+        if (CollUtil.isNotEmpty(finalAllFileIds)) {
+            try {
+                log.info("finalAllFileIds: {}", finalAllFileIds);
+                fileUseCase.deleteByIds(finalAllFileIds); // MinIO + file 테이블 삭제
+            } catch (Exception e) {
+                log.warn("Failed to delete files by fileIds: {}", finalAllFileIds, e);
+            }
+        }
+
+        // upload_record 및 원본 zip 파일 삭제
+        List<UploadRecord> uploadRecords = uploadRecordDAO.findAllByDatasetId(datasetId);
+        List<String> uploadFileUrls = uploadRecords.stream()
+                        .map(UploadRecord::getFileUrl)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList());
+
+        if (CollUtil.isNotEmpty(uploadFileUrls)) {
+            try {
+                fileUseCase.deleteByUrls(uploadFileUrls); // MinIO + file 테이블 삭제
+            } catch (Exception e) {
+                log.warn("Failed to delete files by fileUrls: {}", uploadFileUrls, e);
+            }
+        }
+
+        // b. Annotation 삭제
+        dataAnnotationObjectDAO.remove(
+                Wrappers.lambdaUpdate(DataAnnotationObject.class)
+                        .eq(DataAnnotationObject::getDatasetId, datasetId)
+        );
+
+        dataAnnotationClassificationDAO.remove(
+                Wrappers.lambdaUpdate(DataAnnotationClassification.class)
+                        .eq(DataAnnotationClassification::getDatasetId, datasetId)
+        );
+
+        dataAnnotationRecordDAO.remove(
+                Wrappers.lambdaUpdate(DataAnnotationRecord.class)
+                        .eq(DataAnnotationRecord::getDatasetId, datasetId)
+        );
+
+        // c. ExportRecord 삭제
+        exportRecordDAO.remove(
+                Wrappers.lambdaUpdate(ExportRecord.class)
+                        .eq(ExportRecord::getDatasetId, datasetId)
+        );
+
+        // d. Delete upload_record data related dataset_id 
+        uploadRecordDAO.remove(
+                Wrappers.lambdaUpdate(UploadRecord.class)
+                        .eq(UploadRecord::getDatasetId, datasetId)
+        );
+
+        // e. DataInfo 삭제
+        dataInfoDAO.getBaseMapper().deleteByDatasetId(datasetId);
+
+        // f. 유사도 작업 갱신
+        // datasetSimilarityJobUseCase.submitJob(datasetId);
+
     }
 
     /**
