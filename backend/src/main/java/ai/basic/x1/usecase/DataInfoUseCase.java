@@ -962,7 +962,12 @@ public class DataInfoUseCase {
         }
         fileNodeBOList.forEach(fileNodeBO -> {
             if (fileNodeBO.getType().equals(FILE)) {
-                fileIds.add(fileNodeBO.getFileId());
+                if (fileNodeBO.getFileId() != null) {  // null 체크 추가
+                    fileIds.add(fileNodeBO.getFileId());
+                }
+                else{
+                    log.warn("file id is null, file id: {}", fileNodeBO.getName());
+                }
             } else {
                 fileIds.addAll(getFileIds(fileNodeBO.getFiles()));
             }
@@ -1009,9 +1014,53 @@ public class DataInfoUseCase {
                     var dataResultExportBO = DataResultExportBO.builder().dataId(dataId).version(version).build();
                     var objects = new ArrayList<DataResultObjectExportBO>();
                     objectSourceList.forEach(o -> {
-                        var dataResultObjectExportBO = DefaultConverter.convert(o.getClassAttributes(), DataResultObjectExportBO.class);
-                        dataResultObjectExportBO.setClassName(classMap.get(o.getClassId()));
-                        dataResultObjectExportBO.setClassId(o.getClassId());
+                        var classAttrs = o.getClassAttributes(); 
+                        var dataResultObjectExportBO = DefaultConverter.convert(classAttrs, DataResultObjectExportBO.class);
+                        // contour 
+                        JSONObject contour = new JSONObject();
+                        if (classAttrs.get("pointN") != null)
+                            contour.put("pointN", classAttrs.get("pointN"));
+                        if (classAttrs.get("size3D") != null) 
+                            contour.put("size3D", classAttrs.get("size3D"));
+                        if (classAttrs.get("center3D") != null) 
+                            contour.put("center3D", classAttrs.get("center3D"));
+                        if (classAttrs.get("rotation3D") != null) 
+                            contour.put("rotation3D", classAttrs.get("rotation3D"));
+                        contour.put("viewIndex", 0);
+                        if (classAttrs.get("points") != null) {
+                            contour.put("points", classAttrs.get("points"));
+                        } else {
+                            contour.put("points", new JSONArray());
+                        }                        
+                        dataResultObjectExportBO.setContour(contour);
+
+                        // confidence
+                        Object confObj = classAttrs.get("confidence");
+                        if (confObj != null) {
+                            if (confObj instanceof BigDecimal) {
+                                dataResultObjectExportBO.setModelConfidence((BigDecimal) confObj);
+                            } else if (confObj instanceof Number) {  // Double, Integer 등
+                                dataResultObjectExportBO.setModelConfidence(BigDecimal.valueOf(((Number) confObj).doubleValue()));
+                            } else if (confObj instanceof String) {
+                                dataResultObjectExportBO.setModelConfidence(new BigDecimal((String) confObj));
+                            } else {
+                                dataResultObjectExportBO.setModelConfidence(BigDecimal.ZERO); // fallback
+                            }
+                        }
+                        // classId 매핑
+                        Object modelClassObj = classAttrs.get("modelClass");
+                        String modelClass = (modelClassObj != null) ? modelClassObj.toString() : null;
+                        if (modelClass != null) {
+                            if (modelClass.contains("Car")) 
+                                dataResultObjectExportBO.setClassId(Long.valueOf(1));
+                            else if (modelClass.contains("Pedestrian"))
+                                dataResultObjectExportBO.setClassId(Long.valueOf(2));
+                        }
+                        dataResultObjectExportBO.setClassName(modelClass);
+                        dataResultObjectExportBO.setModelClass(modelClass);
+                        
+                        log.info("o.getObjects():{}", JSONUtil.toJsonStr(classAttrs));
+                        log.info("dataResultObjectExportBO:{}", JSONUtil.toJsonStr(dataResultObjectExportBO));
                         objects.add(dataResultObjectExportBO);
                     });
                     dataResultExportBO.setObjects(objects);

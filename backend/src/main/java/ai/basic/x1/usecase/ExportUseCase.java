@@ -118,8 +118,10 @@ public class ExportUseCase {
     }
 
 
-    public <Q extends BaseQueryBO> Long asyncExportDataZip(String fileName, Long serialNumber, Map<Long, String> classMap, Map<Long, String> resultMap,
-                                                           Q query, Function<Q, List<Long>> fun, Function4<List<Long>, Q, Map<Long, String>, Map<Long, String>, List<DataExportBO>> processData) {
+    public <Q extends BaseQueryBO> Long asyncExportDataZip(String fileName, Long serialNumber, 
+                                                            Map<Long, String> classMap, Map<Long, String> resultMap,
+                                                           Q query, Function<Q, List<Long>> fun, Function4<List<Long>, Q,
+                                                            Map<Long, String>, Map<Long, String>, List<DataExportBO>> processData) {
         var lambdaQueryWrapper = new LambdaQueryWrapper<ExportRecord>();
         lambdaQueryWrapper.in(ExportRecord::getSerialNumber, serialNumber);
         var exportRecord = exportRecordDAO.getOne(lambdaQueryWrapper);
@@ -129,8 +131,10 @@ public class ExportUseCase {
         return serialNumber;
     }
 
-    private <Q extends BaseQueryBO> void getDataAndUpload(ExportRecord record, String srcPath, Map<Long, String> classMap, Map<Long, String> resultMap, Q query,
-                                                          Function<Q, List<Long>> fun, Function4<List<Long>, Q, Map<Long, String>, Map<Long, String>, List<DataExportBO>> processData) {
+    private <Q extends BaseQueryBO> void getDataAndUpload(ExportRecord record, String srcPath, 
+                                                        Map<Long, String> classMap, Map<Long, String> resultMap, Q query,
+                                                        Function<Q, List<Long>> fun, Function4<List<Long>, Q, Map<Long, String>,
+                                                        Map<Long, String>, List<DataExportBO>> processData) {
         var rootPath = String.format("%s/%s", record.getCreatedBy(),
                 TemporalAccessorUtil.format(OffsetDateTime.now(), DatePattern.PURE_DATETIME_PATTERN));
         var exportRecordBOBuilder = ExportRecordBO.builder()
@@ -276,7 +280,9 @@ public class ExportUseCase {
             // }
         });
     }
-    private <Q extends BaseQueryBO> void writeFile(List<Long> dataIds, String zipPathOr, Map<Long, String> classMap, Map<Long, String> resultMap, Q query, Function4<List<Long>, Q, Map<Long, String>, Map<Long, String>, List<DataExportBO>> processData) {
+    private <Q extends BaseQueryBO> void writeFile(List<Long> dataIds, String zipPathOr, Map<Long, String> classMap, 
+                                                   Map<Long, String> resultMap, Q query, Function4<List<Long>, Q, Map<Long, String>,
+                                                   Map<Long, String>, List<DataExportBO>> processData) {
         var dataExportBOList = processData.invoke(dataIds, query, classMap, resultMap);
         var jsonConfig = JSONConfig.create().setIgnoreNullValue(false);
         dataExportBOList.forEach(dataExportBO -> {
