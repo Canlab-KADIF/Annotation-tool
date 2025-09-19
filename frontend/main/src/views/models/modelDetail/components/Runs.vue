@@ -72,6 +72,43 @@
   import { detailType } from './typing';
   // import { Authority } from '/@/components/Authority';
   // import { PermissionCodeEnum } from '/@/enums/permissionCodeEnum';
+  import { onBeforeUnmount } from 'vue';
+  // polling 관리용
+  let pollTimer: any = null;
+  function startPolling() {
+    stopPolling(); // 기존 polling 초기화
+    pollTimer = setInterval(async () => {
+      try {
+        const res = await reload(); // reload 호출
+        // console.log(" reload 결과:", res);
+
+        const allDone = res.every((r) => r.completionRate === 1 && r.status === "SUCCESS");
+        // const hasError = res.some(
+        //   (r) => r.status === "SUCCESS_WITH_ERROR" || r.status === "FAILURE"
+        // );
+
+        // if (allDone || hasError) {
+        if (allDone){
+          console.log("모든 run 완료 또는 오류 발생 → polling 중지");
+          stopPolling();
+        }
+      } catch (e) {
+        console.error("Polling 중 reload 에러 발생:", e);
+      }
+    }, 5000);
+  }
+  function stopPolling() {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  // 컴포넌트 언마운트 시 polling 정리, ex) 다른 메뉴를 클릭 시, status 체크 중지
+  onBeforeUnmount(() => {
+    // console.log("onBeforeUnmount에 의한 polling 초기화");
+    // stopPolling();
+  });
 
   const { t } = useI18n();
   const go = useGo();
@@ -88,22 +125,23 @@
   // Table ==>
   const [registerTable, { reload }] = useTable({
     afterFetch: (res) => {
-      // debugger;
+      res.forEach((r, i) => {
+        console.log(`🔎 row[${i}] completionRate:`, r.completionRate, "status:", r.status);
+      });
+      const allDone = res.every(
+        (r) => r.completionRate === 1 && r.status === "SUCCESS"
+      );
+      // const hasError = res.some(
+      //   (r) => r.status === "SUCCESS_WITH_ERROR" || r.status === "FAILURE"
+      // );
+
+      if (allDone){ //|| hasError) {
+        console.log("모든 run이 완료되었거나 오류 발생 → polling 중지");
+        stopPolling();
+      }
+
       return res;
     },
-    // filterFn: (data) => {
-    //   data?.status && (data.status = data.status?.toString());
-    //   data?.runRecordType && (data.runRecordType = data.runRecordType?.toString());
-    //   for (const key in data) {
-    //     if (Object.prototype.hasOwnProperty.call(data, key)) {
-    //       const element = data[key];
-    //       if (!element) {
-    //         delete data[key];
-    //       }
-    //     }
-    //   }
-    //   return data;
-    // },
     beforeFetch: (res) => {
       res?.status && (res.status = res.status?.toString());
       res?.runRecordType && (res.runRecordType = res.runRecordType?.toString());
@@ -224,6 +262,7 @@
   };
   // 执行 RunModel
   const handleRun = async (result: Nullable<ResultsModelParam>, data: Nullable<DataModelParam>) => {
+    console.log("handleRun 실행 (Runs.vue)");
     if (props.isLimit) {
       createMessage.error(
         'model runs has reached maximum limit, please contact us for more model usage',
@@ -254,6 +293,8 @@
         closeRunModal();
         setRunModalProps({ confirmLoading: false });
         reload();
+        // 이후 RUNNING 있으면 polling 시작
+        startPolling();
       }, 800);
     } catch (error: unknown) {
       createMessage.error(String(error));
@@ -302,7 +343,8 @@
     await rerunModelRunApi({ id: record.id });
     setTimeout(() => {
       reload();
-    });
+      startPolling();
+    }, 800);
   }
 
   // view 事件
