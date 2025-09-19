@@ -57,6 +57,13 @@ public class ImageDetectionModelHandler extends AbstractModelMessageHandler<Imag
         return ModelCocoResponseConverter.convert(apiResult, systemModelClassMap, filterCondition);
     }
 
+    //To-DO: need to be develpoed batch run function
+    @Override
+    public List<ModelTaskInfoBO> modelRunBatch(List<ModelMessageBO> modelMessageBOList) {
+        // 단일 객체 반환이라면 빈 리스트로 초기화
+        return new ArrayList<>();
+    }
+
     @Override
     ApiResult<ImageDetectionRespDTO> callRemoteService(ModelMessageBO message) {
         try {

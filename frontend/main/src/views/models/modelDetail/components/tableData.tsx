@@ -21,6 +21,7 @@ const statusColor = {
   [statusEnum.success]: '#7FF0B3',
   [statusEnum.failure]: '#F8827B',
   [statusEnum.running]: '#57CCEF',
+  [statusEnum.saving]: '#B794F6',
   [statusEnum.SUCCESS_WITH_ERROR]: '#FCB17A',
 };
 const formatStatusText = (status: statusEnum) => {
@@ -29,6 +30,7 @@ const formatStatusText = (status: statusEnum) => {
     [statusEnum.success]: t('common.status.success'),
     [statusEnum.failure]: t('common.status.failure'),
     [statusEnum.running]: t('common.status.running'),
+    [statusEnum.saving]: t('common.status.saving'),
     [statusEnum.SUCCESS_WITH_ERROR]: t('common.status.successWithError'),
   };
   return statusList[status];
@@ -280,7 +282,10 @@ export function getBasicColumns(): BasicColumn[] {
           text: 'RUNNING',
           value: 'RUNNING',
         },
-
+        {
+          text: 'SAVING',
+          value: 'SAVING',
+        },
         {
           text: 'SUCCESS',
           value: 'SUCCESS',
@@ -384,7 +389,15 @@ export function getActionColumn(funcObj: {
 }
 
 function getErrorReason(errorReason) {
-  if (errorReason) {
-    return JSON.parse(errorReason)[0].split(':')[1];
+  if (!errorReason) return undefined;
+  try {
+    const parsed = JSON.parse(errorReason);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed[0].split(':')[1] || parsed[0];
+    }
+    return errorReason; // fallback 원문 표시
+  } catch (e) {
+    // console.error("❌ getErrorReason parse error:", errorReason, e);
+    return errorReason; // JSON이 아니면 그냥 원문 반환
   }
 }

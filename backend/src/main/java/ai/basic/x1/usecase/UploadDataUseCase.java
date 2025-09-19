@@ -572,7 +572,8 @@ public class UploadDataUseCase {
             var boo = this.validateFilenameByType(f, datasetType);
             if (boo) {
                 var fcList = Arrays.stream(f.listFiles()).filter(fc -> (this.validateFileFormat(fc, datasetType) &&
-                        this.getFilename(fc).equals(dataName))).collect(Collectors.toList());
+                                                                (this.getFilename(fc).equals(dataName))))
+                                                                .collect(Collectors.toList());
                 var count = fcList.size();
                 switch (count) {
                     case 0:
@@ -603,7 +604,7 @@ public class UploadDataUseCase {
             return file.isDirectory() && filename.startsWith(Constants.IMAGE);
         } else {
             return file.isDirectory() && (filename.startsWith(Constants.CAMERA_IMAGE) || filename.startsWith(LIDAR_POINT_CLOUD) ||
-                    filename.equalsIgnoreCase(CAMERA_CONFIG));
+                    filename.equalsIgnoreCase(CAMERA_CONFIG) || filename.startsWith(Constants.META_DATA));
         }
     }
 

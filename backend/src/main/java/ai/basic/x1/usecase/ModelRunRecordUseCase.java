@@ -105,10 +105,11 @@ public class ModelRunRecordUseCase {
                         modelRunRecord.setCompletionRate(new BigDecimal(0));
                         break;
                     case SUCCESS:
+                    case RUNNING:
                     case SUCCESS_WITH_ERROR:
                         modelRunRecord.setCompletionRate(new BigDecimal(1));
                         break;
-                    case RUNNING:
+                    case SAVING:
                         try {
                             var total = modelSerialNoCountDAO.getCount(modelRunRecord.getModelSerialNo());
                             var progress = modelSerialNoIncrDAO.getCount(modelRunRecord.getModelSerialNo());

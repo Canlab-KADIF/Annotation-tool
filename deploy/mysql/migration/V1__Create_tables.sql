@@ -472,7 +472,7 @@ CREATE TABLE `model_run_record`
     `model_version`       varchar(255)                                                                                                           DEFAULT NULL COMMENT 'Model version',
     `run_no`              varchar(20)                                                                                                   NOT NULL COMMENT 'Serial number(For interface display)',
     `dataset_id`          bigint(20)                                                                                                    NOT NULL COMMENT 'Dataset id',
-    `status`              enum ('STARTED','RUNNING','SUCCESS','FAILURE','SUCCESS_WITH_ERROR') CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT 'Model running status',
+    `status`              enum ('STARTED','RUNNING','SAVING','SUCCESS','FAILURE','SUCCESS_WITH_ERROR') CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT 'Model running status',
     `error_reason`        text COMMENT 'Model run error reason',
     `result_filter_param` json                                                                                                                   DEFAULT NULL COMMENT 'Model results filtering parameters',
     `data_filter_param`   json                                                                                                                   DEFAULT NULL COMMENT 'Data filtering parameters',

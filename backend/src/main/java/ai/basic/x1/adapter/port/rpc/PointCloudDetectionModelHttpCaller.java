@@ -3,6 +3,7 @@ package ai.basic.x1.adapter.port.rpc;
 import ai.basic.x1.adapter.dto.ApiResult;
 import ai.basic.x1.adapter.port.rpc.dto.PointCloudDetectionReqDTO;
 import ai.basic.x1.adapter.port.rpc.dto.PointCloudDetectionRespDTO;
+import ai.basic.x1.adapter.port.rpc.dto.PointCloudDetectionExtendedRespDTO;
 import ai.basic.x1.usecase.exception.UsecaseException;
 import cn.hutool.core.date.StopWatch;
 import cn.hutool.core.lang.TypeReference;
@@ -26,14 +27,18 @@ public class PointCloudDetectionModelHttpCaller {
             StopWatch stopWatch = new StopWatch();
             stopWatch.start();
             String requestBody = JSONUtil.toJsonStr(preModelReqDTO);
+            // http request timeout 제거
             HttpRequest httpRequest = HttpUtil.createPost(url)
                     .body(requestBody, ContentType.JSON.getValue());
+            // log.info("httpRequest: {}", httpRequest);
             HttpResponse httpResponse = httpRequest.execute();
+            // log.info("httpResponse: {}", httpResponse);
             stopWatch.stop();
-            log.info(String.format("call preLabelModelService took: %dms,req:%s ,resp:%s", stopWatch.getLastTaskTimeMillis(), requestBody, httpResponse.body()));
             if (httpResponse.getStatus() == HttpStatus.HTTP_OK) {
-                ApiResult<List<PointCloudDetectionRespDTO>> apiResult = JSONUtil.toBean(httpResponse.body(), new TypeReference<>() {
-                }, false);
+                ApiResult<List<PointCloudDetectionRespDTO>> apiResult = JSONUtil.toBean(
+                    httpResponse.body(), 
+                    new TypeReference<>() {},
+                    false);
                 return apiResult;
             } else {
                 throw new UsecaseException("preLabelModel run error!");
@@ -41,6 +46,40 @@ public class PointCloudDetectionModelHttpCaller {
         } catch (Throwable throwable) {
             log.error("call pre-model service error.", throwable);
             throw new UsecaseException("preLabelModel run error!");
+        }
+    }
+
+    public ApiResult<List<PointCloudDetectionExtendedRespDTO>> callPreLabelModelWithAllDatas(List<PointCloudDetectionReqDTO> preModelReqDTOList,
+                                                                                     String url) {
+        try {
+            StopWatch stopWatch = new StopWatch();
+            stopWatch.start();
+
+            // requestBody를 List 그대로 JSON 배열로 변환
+            String requestBody = JSONUtil.toJsonStr(preModelReqDTOList);
+
+            // HttpRequest 생성 (timeout 옵션 제거)
+            HttpRequest httpRequest = HttpUtil.createPost(url)
+                    .body(requestBody, ContentType.JSON.getValue());
+            HttpResponse httpResponse = httpRequest.execute();
+
+            stopWatch.stop();
+
+            if (httpResponse.getStatus() == HttpStatus.HTTP_OK) {
+                ApiResult<List<PointCloudDetectionExtendedRespDTO>> apiResult = JSONUtil.toBean(
+                        httpResponse.body(),
+                        new TypeReference<>() {},
+                        false
+                );
+                // log.info("apiResult: {}", apiResult);
+                return apiResult;
+            } else {
+                throw new UsecaseException("preLabelModel batch run error!");
+            }
+
+        } catch (Throwable throwable) {
+            log.error("call pre-model batch service error.", throwable);
+            throw new UsecaseException("preLabelModel batch run error!");
         }
     }
 }

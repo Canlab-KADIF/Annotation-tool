@@ -11,6 +11,9 @@ import ai.basic.x1.adapter.port.rpc.PointCloudDetectionModelHttpCaller;
 import ai.basic.x1.adapter.port.rpc.dto.PointCloudDetectionMetricsReqDTO;
 import ai.basic.x1.adapter.port.rpc.dto.PointCloudDetectionObject;
 import ai.basic.x1.adapter.port.rpc.dto.PointCloudDetectionRespDTO;
+import ai.basic.x1.adapter.port.rpc.dto.PointCloudDetectionExtendedObject;
+import ai.basic.x1.adapter.port.rpc.dto.PointCloudDetectionExtendedRespDTO;
+import ai.basic.x1.usecase.exception.UsecaseCode;
 import ai.basic.x1.entity.*;
 import ai.basic.x1.entity.enums.DataAnnotationObjectSourceTypeEnum;
 import ai.basic.x1.entity.enums.ModelCodeEnum;
@@ -30,6 +33,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import ai.basic.x1.adapter.port.rpc.dto.PointCloudDetectionReqDTO;
 
 /**
  * @author andy
@@ -55,10 +59,28 @@ public class PointCloudDetectionModelMessageHandler extends AbstractModelMessage
                 JSONUtil.toBean(modelMessageBO.getResultFilterParam(), PointCloudDetectionParamBO.class), modelClassMap);
         return preLabelModelObjectBO;
     }
+    
+    @Override
+    public List<ModelTaskInfoBO> modelRunBatch(List<ModelMessageBO> modelMessageBOList) {
+        try {
+            // log.info("modelRunBatch modelSerialNo: {}", modelMessageBOList.get(0).getModelSerialNo());
+            ApiResult<List<PointCloudDetectionExtendedRespDTO>> apiResult = getModelRunBatchApiResult(modelMessageBOList);
+            Map<String, ModelClass> modelClassMap = modelUseCase.getModelClassMapByModelId(modelMessageBOList.get(0).getModelId());
+            // log.info("model id: {}, modelClassMap: {}", modelMessageBOList.get(0).getModelId(), modelClassMap);
+            List<PointCloudDetectionObjectBO> preLabelModelObjectBO = ModelResultConverter.preModelBatchResultConverter(apiResult,
+                    JSONUtil.toBean(modelMessageBOList.get(0).getResultFilterParam(), PointCloudDetectionParamBO.class), modelClassMap);
+            return new ArrayList<ModelTaskInfoBO>(preLabelModelObjectBO);
+        } catch (Exception e) {
+            log.error("modelRunBatch 실행 중 오류 발생", e);
+            throw e;
+        }
+    }
+
 
     @Override
     ApiResult<List<PointCloudDetectionRespDTO>> callRemoteService(ModelMessageBO modelMessageBO) {
-        ApiResult<List<PointCloudDetectionRespDTO>> listApiResult = preLabelModelHttpCaller.callPreLabelModel(PointCloudDetectionModelReqConverter.buildRequestParam(modelMessageBO), modelMessageBO.getUrl());
+        ApiResult<List<PointCloudDetectionRespDTO>> listApiResult = preLabelModelHttpCaller.callPreLabelModel(PointCloudDetectionModelReqConverter.buildRequestParam(modelMessageBO)
+                                                                                                              ,modelMessageBO.getUrl());
         return listApiResult;
     }
 
@@ -141,6 +163,43 @@ public class PointCloudDetectionModelMessageHandler extends AbstractModelMessage
         pointCloudDetectionObject.setRotX(rotation3D.getX());
         pointCloudDetectionObject.setRotY(rotation3D.getY());
         pointCloudDetectionObject.setRotZ(rotation3D.getZ());
+    }
+    ApiResult<List<PointCloudDetectionExtendedRespDTO>> callRemoteBatchRunService(List<ModelMessageBO> modelMessageBOList) {
+        try {
+            log.info("PointCloudDetectionExtendedRespDTO callRemoteBatchRunService func");
+
+            // 각 ModelMessageBO → RequestParam 변환
+            List<PointCloudDetectionReqDTO> requestParams = modelMessageBOList.stream()
+                    .map(PointCloudDetectionModelReqConverter::buildRequestParam)
+                    .collect(Collectors.toList());
+
+            ApiResult<List<PointCloudDetectionExtendedRespDTO>> listApiResult =
+                    preLabelModelHttpCaller.callPreLabelModelWithAllDatas(requestParams, modelMessageBOList.get(0).getUrl());
+
+            return listApiResult;
+        } catch (Exception e) {
+            log.error("callRemoteBatchRunService error:", e);
+            throw e;
+        }
+    }
+    public ApiResult<List<PointCloudDetectionExtendedRespDTO>> getModelRunBatchApiResult(List<ModelMessageBO> modelMessageBOList) {
+        try {
+            ApiResult<List<PointCloudDetectionExtendedRespDTO>> apiResult =
+                    callRemoteBatchRunService(modelMessageBOList);
+
+            if (apiResult != null && apiResult.getCode() == UsecaseCode.OK) {
+                return apiResult;
+            } else {
+                if (apiResult != null) {
+                    return new ApiResult<>(apiResult.getCode(), apiResult.getMessage());
+                } else {
+                    return new ApiResult<>(UsecaseCode.UNKNOWN, "service is busy");
+                }
+            }
+        } catch (Exception e) {
+            log.error("getModelRunBatchApiResult error", e);
+            throw e;
+        }
     }
 
     @Override

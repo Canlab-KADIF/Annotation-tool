@@ -19,5 +19,6 @@ public class DataInfo {
     private Long id;
     private List<String> imageUrls;
     private String pointCloudUrl;
+    private String sensorMetaUrl;
     private String cameraConfigUrl;
 }
