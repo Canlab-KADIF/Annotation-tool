@@ -157,7 +157,7 @@ public class ExportUseCase {
         dataIdList.forEach(subDataIds -> {
             log.info("subDataIds: {}", subDataIds);
             // writeFile(subDataIds, srcPath, classMap, resultMap, query, processData);
-            writeAnnotationFilesWithOriginalZip(subDataIds, srcPath, classMap, resultMap, query, processData);
+            writeAnnotationFiles(subDataIds, srcPath, classMap, resultMap, query, processData);
             var exportRecordBO = exportRecordBOBuilder
                     .generatedNum(i.get() * BATCH_SIZE + subDataIds.size())
                     .totalNum(dataIds.size())
@@ -243,7 +243,7 @@ public class ExportUseCase {
     }
     
     
-    private <Q extends BaseQueryBO> void writeAnnotationFilesWithOriginalZip(List<Long> dataIds, String zipPathOr, Map<Long, String> classMap, 
+    private <Q extends BaseQueryBO> void writeAnnotationFiles(List<Long> dataIds, String zipPathOr, Map<Long, String> classMap, 
                                                                                 Map<Long, String> resultMap, Q query, 
                                                                                 Function4<List<Long>, Q, Map<Long, String>, 
                                                                                 Map<Long, String>, List<DataExportBO>> processData) {
@@ -251,7 +251,7 @@ public class ExportUseCase {
         var jsonConfig = JSONConfig.create().setIgnoreNullValue(false);
         var datasetId = ((DataInfoQueryBO) query).getDatasetId();
         List<UploadRecordBO> recordsBO = uploadUseCase.findByDatasetId(datasetId);
-        log.info("writeAnnotationFilesWithOriginalZip, dataset id: {} ", datasetId);
+        log.info("writeAnnotationFiles, dataset id: {} ", datasetId);
         log.info("dataExportBOList size: {}", dataExportBOList.size());
         dataExportBOList.forEach(dataExportBO -> {
             var sceneName = dataExportBO.getSceneName();
