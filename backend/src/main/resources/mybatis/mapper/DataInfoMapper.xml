@@ -47,6 +47,11 @@
         <if test="isQueryDeletedData == false">
             AND d.is_deleted=#{isQueryDeletedData}
         </if>
+        ORDER BY FIELD(d.id,
+            <foreach collection="ids" item="id" separator=",">
+                #{id}
+            </foreach>
+        )        
     </select>
 
     <select id="selectSixDataIdByDatasetIds" resultType="ai.basic.x1.adapter.port.dao.mybatis.model.DatasetSixData">
@@ -69,8 +74,12 @@
     <select id="findModelRunDataIds" resultType="java.lang.Long">
         SELECT id FROM data ${ew.customSqlSegment}
         <if test="isExcludeModelData == true">
-            AND id not in (SELECT data_id FROM model_dataset_result WHERE model_id =  #{modelId})
+            AND id not in (
+                SELECT data_id 
+                FROM model_dataset_result 
+                WHERE model_id =  #{modelId})
         </if>
+        ORDER BY CAST(name AS UNSIGNED) ASC
         limit #{limit}
     </select>
 
