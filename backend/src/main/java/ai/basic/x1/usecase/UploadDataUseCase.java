@@ -890,7 +890,7 @@ public class UploadDataUseCase {
             var files = new ArrayList<File>();
             for (FileBO fileBO : fileBOS) {
                 var mimeType = fileBO.getType();
-                var savePath = tempPath + fileBO.getPath().replace(rootPath, "");
+                var savePath = tempPath + "/" + fileBO.getPath().substring(rootPath.length());
                 if (IMAGE_DATA_TYPE.contains(mimeType)) {
                     var filePath = fileBO.getPath();
                     var basePath = filePath.substring(0, filePath.lastIndexOf(SLANTING_BAR) + 1);
