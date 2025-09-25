@@ -103,6 +103,12 @@ public class DatasetUseCase {
     @Autowired
     private ExportRecordDAO exportRecordDAO;
 
+    @Autowired
+    private ModelDatasetResultDAO modelDatasetResultDAO;
+
+    @Autowired
+    private ModelRunRecordDAO modelRunRecordDAO;
+
     @Value("${file.tempPath:/tmp/xtreme1/}")
     private String tempPath;
 
@@ -296,34 +302,46 @@ public class DatasetUseCase {
             })));
         }
 
-        // 3. Delete annotation object data related dataset_id 
-        var objWrapper = Wrappers.lambdaUpdate(DataAnnotationObject.class)
-                .eq(DataAnnotationObject::getDatasetId, dataset_id);
-        dataAnnotationObjectDAO.remove(objWrapper);
-
-        // 4. Delete annotation classification data related dataset_id 
-        var clsWrapper = Wrappers.lambdaUpdate(DataAnnotationClassification.class)
-                .eq(DataAnnotationClassification::getDatasetId, dataset_id);
-        dataAnnotationClassificationDAO.remove(clsWrapper);
-        
-        // 5. Delete annotation record data related dataset_id 
-        var annosRecordWrapper = Wrappers.lambdaUpdate(DataAnnotationRecord.class)
-                .eq(DataAnnotationRecord::getDatasetId, dataset_id);
-        dataAnnotationRecordDAO.remove(annosRecordWrapper);
-
-        // 6. Delete export_record data related dataset_id 
-        var exportRecordWrapper = Wrappers.lambdaUpdate(ExportRecord.class)
-        .eq(ExportRecord::getDatasetId, dataset_id);
-        exportRecordDAO.remove(exportRecordWrapper);
-
-        // 7. Delete upload_record data related dataset_id 
-        var uploadRecordWrapper = Wrappers.lambdaUpdate(UploadRecord.class)
-        .eq(UploadRecord::getDatasetId, dataset_id);
-        uploadRecordDAO.remove(uploadRecordWrapper);
-        
-        // 8 Delete datainfo, dataset related dataset_id 
+        // Delete annotation object data related dataset_id 
+        dataAnnotationObjectDAO.remove(
+            Wrappers.lambdaUpdate(DataAnnotationObject.class)
+                    .eq(DataAnnotationObject::getDatasetId, dataset_id));
+        log.info("dataAnnotationObject removed!");
+        // Delete annotation classification data related dataset_id 
+        dataAnnotationClassificationDAO.remove(
+            Wrappers.lambdaUpdate(DataAnnotationClassification.class)
+                    .eq(DataAnnotationClassification::getDatasetId, dataset_id));
+        log.info("dataAnnotationClassification removed!");
+        // Delete annotation record data related dataset_id 
+        dataAnnotationRecordDAO.remove(
+            Wrappers.lambdaUpdate(DataAnnotationRecord.class)
+                    .eq(DataAnnotationRecord::getDatasetId, dataset_id));
+        log.info("dataAnnotationRecord removed!");
+        // Delete export_record data related dataset_id 
+        exportRecordDAO.remove(
+            Wrappers.lambdaUpdate(ExportRecord.class)
+                    .eq(ExportRecord::getDatasetId, dataset_id));
+        log.info("exportRecord removed!");
+        // Delete upload_record data related dataset_id 
+        uploadRecordDAO.remove(
+            Wrappers.lambdaUpdate(UploadRecord.class)
+                    .eq(UploadRecord::getDatasetId, dataset_id));
+        log.info("uploadRecord removed!");
+        // Delete model_dataset_result data related dataset_id
+        modelDatasetResultDAO.remove(
+            Wrappers.lambdaUpdate(ModelDatasetResult.class)
+                    .eq(ModelDatasetResult::getDatasetId, dataset_id)
+        );
+        // Delete model run record data related dataset_id
+        modelRunRecordDAO.remove(
+            Wrappers.lambdaUpdate(ModelRunRecord.class)
+                    .eq(ModelRunRecord::getDatasetId, dataset_id)
+        );
+        log.info("model run record removed!");
+        // Delete data_info, dataset related dataset_id
         dataInfoDAO.getBaseMapper().deleteByDatasetId(dataset_id);
-        datasetDAO.removeById(dataset_id);        
+        datasetDAO.removeById(dataset_id);
+        log.info("datainfo, dataset removed!");        
     }
 
     /**

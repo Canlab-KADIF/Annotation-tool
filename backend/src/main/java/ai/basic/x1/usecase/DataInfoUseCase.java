@@ -102,6 +102,12 @@ public class DataInfoUseCase {
     private ModelDataResultDAO modelDataResultDAO;
 
     @Autowired
+    private ModelDatasetResultDAO modelDatasetResultDAO;
+
+    @Autowired
+    private ModelRunRecordDAO modelRunRecordDAO;
+    
+    @Autowired
     private DatasetSimilarityJobUseCase datasetSimilarityJobUseCase;
 
     @Autowired
@@ -311,29 +317,37 @@ public class DataInfoUseCase {
             }
         }
 
-        // b. Annotation 삭제
+        // Annotation 삭제
         dataAnnotationObjectDAO.remove(
                 Wrappers.lambdaUpdate(DataAnnotationObject.class)
                         .eq(DataAnnotationObject::getDatasetId, datasetId)
         );
-
-        dataAnnotationClassificationDAO.remove(
-                Wrappers.lambdaUpdate(DataAnnotationClassification.class)
-                        .eq(DataAnnotationClassification::getDatasetId, datasetId)
+        
+        // ModelDataset 삭제
+        modelDatasetResultDAO.remove(
+                Wrappers.lambdaUpdate(ModelDatasetResult.class)
+                        .eq(ModelDatasetResult::getDatasetId, datasetId)
         );
 
+        // Delete model run record data related dataset_id
+        modelRunRecordDAO.remove(
+            Wrappers.lambdaUpdate(ModelRunRecord.class)
+                    .eq(ModelRunRecord::getDatasetId, datasetId)
+        );
+
+        // dataAnnotationRecordDAO 삭제
         dataAnnotationRecordDAO.remove(
                 Wrappers.lambdaUpdate(DataAnnotationRecord.class)
                         .eq(DataAnnotationRecord::getDatasetId, datasetId)
         );
 
-        // c. ExportRecord 삭제
+        // ExportRecord 삭제
         exportRecordDAO.remove(
                 Wrappers.lambdaUpdate(ExportRecord.class)
                         .eq(ExportRecord::getDatasetId, datasetId)
         );
 
-        // d. Delete upload_record data related dataset_id 
+        // Delete upload_record data related dataset_id 
         uploadRecordDAO.remove(
                 Wrappers.lambdaUpdate(UploadRecord.class)
                         .eq(UploadRecord::getDatasetId, datasetId)
