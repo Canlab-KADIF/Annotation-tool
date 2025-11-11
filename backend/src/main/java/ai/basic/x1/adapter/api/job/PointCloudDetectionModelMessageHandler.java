@@ -156,7 +156,7 @@ public class PointCloudDetectionModelMessageHandler extends AbstractModelMessage
         var rotation3D = objectBO.getRotation3D();
         pointCloudDetectionObject.setX(center3D.getX());
         pointCloudDetectionObject.setY(center3D.getY());
-        pointCloudDetectionObject.setZ(center3D.getY());
+        pointCloudDetectionObject.setZ(center3D.getZ());
         pointCloudDetectionObject.setDx(size3D.getX());
         pointCloudDetectionObject.setDy(size3D.getY());
         pointCloudDetectionObject.setDz(size3D.getZ());
