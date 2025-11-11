@@ -264,7 +264,18 @@ export default class DataManager {
             let valid = filterMap.all || filterMap.source[sourceId];
             if (!valid) return;
 
+            // ontology 색상 적용
+            // console.log("editor.state: ", this.editor.state);
+            const classInfo = editor.state.classTypes.find(
+                c => c.name === userData.modelClass || c.name === userData.classType
+            );
+            const color = classInfo ? classInfo.color : '#ffffff';
+            // console.log("color value: ", color);
+
             if (e instanceof Box) {
+                // 색상 적용
+                e.color.set(color);
+                // console.log('Box object:', e);
                 e.parent = this.editor.pc.annotate3D;
                 annotate3D.push(e);
             } else if (e instanceof Object2D) annotate2D.push(e);

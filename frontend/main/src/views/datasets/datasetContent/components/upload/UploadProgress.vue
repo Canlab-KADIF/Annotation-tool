@@ -72,6 +72,10 @@
     dataFormat?: string;
   }>();
   const emits = defineEmits(['fetchList']);
+  import { useMessage } from '/@/hooks/web/useMessage';
+  const { createMessage } = useMessage();
+  import { useI18n } from '/@/hooks/web/useI18n';
+  const { t } = useI18n();
 
   /** Progress */
   const uploadProgress = ref<any[]>([]);
@@ -221,6 +225,7 @@
                 fileItem.controller.signal,
               );
               const uploadStatus = ref<UploadStatusEnum>(UploadStatusEnum.DOWNLOADING);
+              createMessage.success(t('백엔드에 upload 관련 api 요청중...'));
               const findUploadRecord = async () => {
                 try {
                   const record = await findUploadRecordBySerialNumbers(

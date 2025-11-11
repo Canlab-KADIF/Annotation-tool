@@ -247,8 +247,11 @@ export default function useInstance() {
         classMap[noClassMapKey] = noClass;
         classifyMap[noProject.key] = noProject;
 
+        // ontology class type 초기화 부분
         editor.state.classTypes.forEach((item) => {
-            let classMapId = noClassifyKey + item.id + item.name;
+            // let classMapId = noClassifyKey + item.id + item.name;
+            let classMapId = noClassifyKey + "_" +item.name;
+            console.log("ontology classType init classMapId : ", classMapId);
             let insList: IClass = {
                 key: classMapId,
                 classId: item.id,
@@ -280,7 +283,12 @@ export default function useInstance() {
             // only one classify
             classify = noClassifyKey;
             let trackMapId = trackId;
-            let classMapId = classify + classId + classType;
+            // let classMapId = classify + classId + classType;
+            let classMapId = classify + "_" + classType;
+            console.log("OBJ classMapId : ", classMapId);
+            // let classMapId = `${classify}|${classKey}`;
+            console.log("classifyMap : ", classifyMap);
+            console.log("classMap : ", classMap);
 
             let name = userData.id.slice(-4);
 
@@ -396,6 +404,9 @@ export default function useInstance() {
         state.trackId = userData.trackId;
         editor.state.currentClass = userData.classId || '';
         let classMapId = classify + classId + classType;
+        console.log("updateSelect function");
+        console.log("editor.state.currentClass: ", editor.state.currentClass);
+        console.log("classMapId : ", classMapId);
 
         state.list.forEach((classifyInfo) => {
             if (classifyInfo.key !== classify) {
@@ -520,13 +531,16 @@ export default function useInstance() {
     }
 
     function getClassInfo(userData: IUserData) {
-        let className = userData.classType || userData.modelClass || '';
+        let className = userData.modelClass || userData.classType || '';
         let classType = noClassKey;
         let isModel = false;
+        console.log("className : ", className);
+        console.log("userData: ", userData);
         if (userData.classType) {
             classType = userData.classType;
         } else if (userData.modelClass) {
-            classType = '__Model__##' + userData.modelClass;
+            // classType = '__Model__##' + userData.modelClass;
+            classType = userData.modelClass;
             isModel = true;
         }
         return { className, classType, isModel, classId: userData.classId ?? '' };

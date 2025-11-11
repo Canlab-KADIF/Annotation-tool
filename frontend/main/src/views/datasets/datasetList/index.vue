@@ -126,7 +126,8 @@
   const end = ref<Nullable<Dayjs>>(null);
   const scrollRef = ref<Nullable<ScrollActionType>>(null);
   const name = ref<string>('');
-  const sortField = ref<SortFieldEnum>(SortFieldEnum.CREATED_AT);
+  // const sortField = ref<SortFieldEnum>(SortFieldEnum.CREATED_AT);
+  const sortField = ref<SortFieldEnum>(SortFieldEnum.NAME);
   const sortType = ref<SortTypeEnum>(SortTypeEnum.ASC);
   const { t } = useI18n();
   const canload = ref(true);
@@ -242,7 +243,8 @@
 
   const resetFilter = () => {
     filterForm.name = '';
-    filterForm.sortField = SortFieldEnum.CREATED_AT;
+    // filterForm.sortField = SortFieldEnum.CREATED_AT;
+    filterForm.sortField = SortFieldEnum.NAME;
     filterForm.createStartTime = null;
     filterForm.createEndTime = null;
     filterForm.ascOrDesc = SortTypeEnum.ASC;
