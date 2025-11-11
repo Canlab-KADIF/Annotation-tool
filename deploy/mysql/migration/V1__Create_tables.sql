@@ -106,7 +106,7 @@ CREATE TABLE `data_annotation_object`
     `data_id`          bigint(20)                            DEFAULT NULL COMMENT 'Data ID',
     `class_id`         bigint(20)                            DEFAULT NULL COMMENT 'Class ID',
     `class_attributes` json                                  DEFAULT NULL COMMENT 'Class Attributes',
-    `source_type` enum ('DATA_FLOW','IMPORTED','MODEL','ROS') DEFAULT 'DATA_FLOW' COMMENT 'Source type',
+    `source_type` enum ('DATA_FLOW','IMPORTED','MODEL','ROS', 'GT') DEFAULT 'DATA_FLOW' COMMENT 'Source type',
     `source_id`        bigint(20)                            DEFAULT '-1' COMMENT 'Source ID',
     `created_at`       datetime                              DEFAULT CURRENT_TIMESTAMP COMMENT 'Create time',
     `created_by`       bigint(20)                            DEFAULT NULL COMMENT 'Creator id',

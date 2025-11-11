@@ -91,3 +91,4 @@ INSERT INTO `model_class`(`model_id`, `name`, `code`, `created_at`, `created_by`
 INSERT INTO `model_class`(`model_id`, `name`, `code`, `created_at`, `created_by`, `updated_at`, `updated_by`) VALUES (1, 'Bicycle', 'BICYCLE', current_timestamp, 1, NULL, NULL);
 INSERT INTO `model_class`(`model_id`, `name`, `code`, `created_at`, `created_by`, `updated_at`, `updated_by`) VALUES (1, 'Pedestrian', 'PEDESTRIAN', current_timestamp, 1, NULL, NULL);
 INSERT INTO `model_class`(`model_id`, `name`, `code`, `created_at`, `created_by`, `updated_at`, `updated_by`) VALUES (1, 'Traffic Cone', 'TRAFFIC_CONE', current_timestamp, 1, NULL, NULL);
+INSERT INTO `model_class`(`model_id`, `name`, `code`, `created_at`, `created_by`, `updated_at`, `updated_by`) VALUES (1, 'Vehicle', 'VEHICLE', current_timestamp, 1, NULL, NULL);
