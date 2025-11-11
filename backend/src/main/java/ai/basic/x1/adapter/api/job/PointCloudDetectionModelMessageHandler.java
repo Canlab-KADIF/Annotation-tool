@@ -23,6 +23,8 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
+import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONArray;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import lombok.extern.slf4j.Slf4j;
@@ -94,9 +96,33 @@ public class PointCloudDetectionModelMessageHandler extends AbstractModelMessage
             var modelRunRecord = modelRunRecordDAO.getOne(lambdaQueryWrapper);
             var dataAnnotationObjectBOList = new ArrayList<DataAnnotationObjectBO>(modelResult.getObjects().size());
             modelResult.getObjects().forEach(o -> {
+                // 원본 객체 JSON 변환
+                var objJson = JSONUtil.parseObj(o);
+
+                // contour 생성
+                var contour = new JSONObject();
+                contour.set("pointN", objJson.getInt("pointN"));
+                contour.set("points", new JSONArray()); // 빈 배열
+                contour.set("size3D", objJson.getJSONObject("size3D"));
+                contour.set("center3D", objJson.getJSONObject("center3D"));
+                contour.set("rotation3D", objJson.getJSONObject("rotation3D"));
+
+                // 원본 JSON에서 contour 관련 필드 제거
+                objJson.remove("pointN");
+                objJson.remove("size3D");
+                objJson.remove("center3D");
+                objJson.remove("rotation3D");
+
+                // contour 삽입
+                objJson.set("contour", contour);
+
                 var dataAnnotationObjectBO = DataAnnotationObjectBO.builder()
-                        .datasetId(modelMessage.getDatasetId()).dataId(modelResult.getDataId()).classAttributes(JSONUtil.parseObj(o))
-                        .sourceType(DataAnnotationObjectSourceTypeEnum.MODEL).sourceId(modelRunRecord.getId()).build();
+                        .datasetId(modelMessage.getDatasetId())
+                        .dataId(modelResult.getDataId())
+                        .classAttributes(objJson)
+                        .sourceType(DataAnnotationObjectSourceTypeEnum.MODEL)
+                        .sourceId(modelRunRecord.getId())
+                        .build();
                 dataAnnotationObjectBOList.add(dataAnnotationObjectBO);
             });
             dataAnnotationObjectDAO.saveBatch(DefaultConverter.convert(dataAnnotationObjectBOList, DataAnnotationObject.class));

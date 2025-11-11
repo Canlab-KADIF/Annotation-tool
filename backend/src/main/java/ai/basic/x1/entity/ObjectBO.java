@@ -20,6 +20,7 @@ import java.math.BigDecimal;
 public class ObjectBO {
 
     private String modelClass;
+    private String className;
     private String type;
     private BigDecimal confidence;
     private PointBO center3D;

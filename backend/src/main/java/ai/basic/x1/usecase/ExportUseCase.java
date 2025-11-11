@@ -25,6 +25,7 @@ import cn.hutool.core.util.ZipUtil;
 import cn.hutool.http.HttpUtil;
 import cn.hutool.json.JSONConfig;
 import cn.hutool.json.JSONUtil;
+import cn.hutool.json.JSON;
 import com.alibaba.ttl.TtlRunnable;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Assert;
@@ -266,7 +267,9 @@ public class ExportUseCase {
                             Constants.RESULT,
                             sourceName != null ? sourceName : "UNKNOWN",
                             dataExportBaseBO.getName());
-                    FileUtil.writeString(JSONUtil.toJsonStr(resultBO, jsonConfig), resultPath, StandardCharsets.UTF_8);
+                    // FileUtil.writeString(JSONUtil.toJsonStr(resultBO, jsonConfig), resultPath, StandardCharsets.UTF_8);
+                    JSON json = JSONUtil.parse(resultBO, jsonConfig);
+                    FileUtil.writeString(JSONUtil.toJsonPrettyStr(json), resultPath, StandardCharsets.UTF_8);
                 }
             }
             // else {

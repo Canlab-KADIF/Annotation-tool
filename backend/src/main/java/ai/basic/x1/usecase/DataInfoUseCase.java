@@ -1030,21 +1030,25 @@ public class DataInfoUseCase {
                     var dataResultExportBO = DataResultExportBO.builder().dataId(dataId).version(version).build();
                     var objects = new ArrayList<DataResultObjectExportBO>();
                     objectSourceList.forEach(o -> {
-                        var classAttrs = o.getClassAttributes(); 
+                        var classAttrs = o.getClassAttributes();
+                        JSONObject contourAttrs = (JSONObject) classAttrs.get("contour");
+                        if (contourAttrs == null) {
+                            log.warn("contourAttrs is null, dataId: {}, objectId: {}", dataId, o.getId());
+                            contourAttrs = new JSONObject();
+                        }
                         var dataResultObjectExportBO = DefaultConverter.convert(classAttrs, DataResultObjectExportBO.class);
                         // contour 
                         JSONObject contour = new JSONObject();
-                        if (classAttrs.get("pointN") != null)
-                            contour.put("pointN", classAttrs.get("pointN"));
-                        if (classAttrs.get("size3D") != null) 
-                            contour.put("size3D", classAttrs.get("size3D"));
-                        if (classAttrs.get("center3D") != null) 
-                            contour.put("center3D", classAttrs.get("center3D"));
-                        if (classAttrs.get("rotation3D") != null) 
-                            contour.put("rotation3D", classAttrs.get("rotation3D"));
-                        contour.put("viewIndex", 0);
-                        if (classAttrs.get("points") != null) {
-                            contour.put("points", classAttrs.get("points"));
+                        if (contourAttrs.get("pointN") != null)
+                            contour.put("pointN", contourAttrs.get("pointN"));
+                        if (contourAttrs.get("size3D") != null) 
+                            contour.put("size3D", contourAttrs.get("size3D"));
+                        if (contourAttrs.get("center3D") != null) 
+                            contour.put("center3D", contourAttrs.get("center3D"));
+                        if (contourAttrs.get("rotation3D") != null) 
+                            contour.put("rotation3D", contourAttrs.get("rotation3D"));
+                        if (contourAttrs.get("points") != null) {
+                            contour.put("points", contourAttrs.get("points"));
                         } else {
                             contour.put("points", new JSONArray());
                         }                        
@@ -1064,8 +1068,11 @@ public class DataInfoUseCase {
                             }
                         }
                         // classId 매핑
-                        Object modelClassObj = classAttrs.get("modelClass");
-                        String modelClass = (modelClassObj != null) ? modelClassObj.toString() : null;
+                        Object modelClassName = classAttrs.get("className");
+                        if (modelClassName == null) {
+                            modelClassName = classAttrs.get("modelClass");
+                        }                        
+                        String modelClass = (modelClassName != null) ? modelClassName.toString() : null;
                         if (modelClass != null) {
                             if (modelClass.contains("Car")) 
                                 dataResultObjectExportBO.setClassId(Long.valueOf(1));
@@ -1073,7 +1080,7 @@ public class DataInfoUseCase {
                                 dataResultObjectExportBO.setClassId(Long.valueOf(2));
                         }
                         dataResultObjectExportBO.setClassName(modelClass);
-                        dataResultObjectExportBO.setModelClass(modelClass);
+                        // dataResultObjectExportBO.setModelClass(modelClass);
                         
                         log.info("o.getObjects():{}", JSONUtil.toJsonStr(classAttrs));
                         log.info("dataResultObjectExportBO:{}", JSONUtil.toJsonStr(dataResultObjectExportBO));

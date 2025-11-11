@@ -79,10 +79,8 @@ public class ModelResultConverter {
                 // log.info("extendedRespDTO.getObjects(): {}", extendedRespDTO.getObjects());
                 var objects = toExtendedObjectBOs(extendedRespDTO.getObjects(), preModelParamBO, modelClassMap);
                 // log.info("objects after toExtendedObjectBOs: {}", objects);
-                builder.objects(objects)
-                    .confidence(extendedRespDTO.getConfidence());
-
-                if (CollUtil.isNotEmpty(objects) && ObjectUtil.isNull(extendedRespDTO.getConfidence())) {
+                builder.objects(objects);
+                if (CollUtil.isNotEmpty(objects)) {
                     var dataConfidence = objects.stream().mapToDouble(object -> object.getConfidence().doubleValue()).summaryStatistics();
                     builder.confidence(BigDecimal.valueOf(dataConfidence.getAverage()));
                 }
@@ -124,8 +122,11 @@ public class ModelResultConverter {
 
         if (rawModelClass != null) {
             switch (rawModelClass) {
+                case "GT_CAR":
+                    modelClassKey = "Car";
+                    break;
                 case "GT_PED":
-                    modelClassKey = "PEDESTRIAN";
+                    modelClassKey = "Pedestrian";
                     break;
                 default:
                     modelClassKey = rawModelClass.replaceFirst("^GT_", "");
@@ -135,7 +136,8 @@ public class ModelResultConverter {
 
         String modelClassName = null;
         if (StrUtil.isNotEmpty(modelClassKey)) {
-            ModelClass mc = modelClassMap.get(modelClassKey.trim());
+            // ModelClass mc = modelClassMap.get(modelClassKey.trim());
+            ModelClass mc = modelClassMap.get(modelClassKey.trim().toUpperCase());
             if (mc != null) {
                 modelClassName = mc.getName();
                 // log.info("raw model class: {}, Mapping model class key: {}, found ModelClass: {}", rawModelClass, modelClassKey, modelClassName);
@@ -150,6 +152,7 @@ public class ModelResultConverter {
                 .trackName(extendedObject.getTrackName())
                 .pointN(extendedObject.getContour().getPointN())
                 .modelClass(modelClassName)
+                .className(StrUtil.isNotBlank(modelClassName) ? modelClassName : "UNKNOWN")
                 .center3D(buildCenter3D(extendedObject))
                 .rotation3D(buildRotation3D(extendedObject))
                 .size3D(buildSize3D(extendedObject))
