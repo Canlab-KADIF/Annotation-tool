@@ -39,6 +39,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
+import ai.basic.x1.entity.enums.DataAnnotationObjectSourceTypeEnum;
 
 import javax.annotation.PostConstruct;
 import java.io.File;
@@ -317,14 +318,15 @@ public abstract class AbstractModelMessageHandler<T> {
         var groundTruthFilePath = String.format("%s%s/groundTruth.json", tempPath, uuid);
         var modelRunFilePath = String.format("%s%s/modelRun.json", tempPath, uuid);
         if (CollUtil.isNotEmpty(modelDatasetResultList)) {
-            var modelDatasetResultSplitList = ListUtil.split(modelDatasetResultList, 100);
+            var modelDatasetResultSplitList = ListUtil.split(modelDatasetResultList, 1000);
             modelDatasetResultSplitList.forEach(subModelDatasetResultList -> {
                 var dataIds = subModelDatasetResultList.stream().map(ModelDatasetResult::getDataId).collect(Collectors.toList());
                 var ids = subModelDatasetResultList.stream().map(ModelDatasetResult::getId).collect(Collectors.toList());
                 var modelDatasetResults = modelDatasetResultDAO.listByIds(ids);
                 var annotationObjectLambdaQueryWrapper = Wrappers.lambdaQuery(DataAnnotationObject.class);
                 annotationObjectLambdaQueryWrapper.in(DataAnnotationObject::getDataId, dataIds);
-                annotationObjectLambdaQueryWrapper.eq(DataAnnotationObject::getSourceId, -1L);
+                // annotationObjectLambdaQueryWrapper.eq(DataAnnotationObject::getSourceId, -1L);
+                annotationObjectLambdaQueryWrapper.eq(DataAnnotationObject::getSourceType, DataAnnotationObjectSourceTypeEnum.GT);
                 var dataAnnotationObjectList = dataAnnotationObjectDAO.list(annotationObjectLambdaQueryWrapper);
                 assembleCalculateMetricsData(modelDatasetResults, dataAnnotationObjectList, groundTruthFilePath, modelRunFilePath);
             });
