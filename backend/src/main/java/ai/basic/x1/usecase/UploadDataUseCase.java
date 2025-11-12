@@ -658,7 +658,8 @@ public class UploadDataUseCase {
 
         // GT와 ROS 경로들 정의
         List<Pair<String, DataAnnotationObjectSourceTypeEnum>> resultSources = List.of(
-            Pair.of("result", DataAnnotationObjectSourceTypeEnum.MODEL),
+            // Pair.of("result", DataAnnotationObjectSourceTypeEnum.MODEL),
+            Pair.of("result", DataAnnotationObjectSourceTypeEnum.GT),
             Pair.of("perception", DataAnnotationObjectSourceTypeEnum.ROS)
         );
         for (var source : resultSources) {
