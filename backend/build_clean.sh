@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 빌드
-docker build -t xtreme1-backend:latest .
+docker build -t gkes-merge-backend:latest .
 
 # Get all dangling image IDs
 dangling_images=$(docker images -f "dangling=true" -q)
