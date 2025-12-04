@@ -8,6 +8,7 @@ services:
     volumes:
       - ./deploy/nginx/conf.d/default.conf:/etc/nginx/conf.d/default.conf
       - /etc/localtime:/etc/localtime:ro
+      - /media/keti-hw/T9/:/media/keti-hw/T9/:ro
     depends_on:
       backend:
         condition: service_healthy

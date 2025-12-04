@@ -82,6 +82,7 @@ export:
     version: Xtreme1 v0.6
 file:
   tempPath: /tmp/xtreme1/
+  localDataPath: /media/keti-hw/T9/
   size:
     large: 800
     medium: 400

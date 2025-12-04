@@ -82,6 +82,9 @@ public class DataInfoController extends BaseDatasetController {
     @Autowired
     private MinioService minioService;
 
+    @org.springframework.beans.factory.annotation.Value("${file.localDataPath:/media/keti-hw/T9/}")
+    private String localDataPath;
+
     @PostMapping("upload")
     public String upload(@RequestBody @Validated DataInfoUploadDTO dto, @LoggedUser LoggedUserDTO userDTO) throws IOException {
         var dataInfoUploadBO = DefaultConverter.convert(dto, DataInfoUploadBO.class);
@@ -209,24 +212,55 @@ public class DataInfoController extends BaseDatasetController {
     public ApiResult<List<String>> downloadOriginalZip(@RequestParam Long datasetId) {
         List<UploadRecordBO> recordsBO = uploadUseCase.findByDatasetId(datasetId);
         log.info("downloadOriginalZip func recordsBO size: {}", recordsBO.size());
-        List<String> presignedList = recordsBO.stream().map(recordBO -> {
+        List<String> downloadLinks = recordsBO.stream().map(recordBO -> {
                     String objectName = recordBO.getFileUrl();
-                    try {
-                        String presigned = minioService.generatePresignedDownloadUrl(
-                            minioProp.getBucketName(),
-                            objectName
-                        );
-                        log.info("presigned delivered to frontend: {}", presigned);
-                        return presigned;
-                    } catch (Exception e) {
-                        log.error("Failed to generate presigned URL for object: {}", objectName, e);
-                        return null;
+                    if (objectName.startsWith("/")) {
+                        // Local file - convert to nginx-served URL
+                        String relativePath = objectName.replace(localDataPath, "");
+                        return "/local-files/" + relativePath;
+                    } else {
+                        try {
+                            String presigned = minioService.generatePresignedDownloadUrl(
+                                minioProp.getBucketName(),
+                                objectName
+                            );
+                            log.info("presigned delivered to frontend: {}", presigned);
+                            return presigned;
+                        } catch (Exception e) {
+                            log.error("Failed to generate presigned URL for object: {}", objectName, e);
+                            return null;
+                        }
                     }
                 })
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
-        log.info("downloadOriginalZip download link: {}", presignedList);
-        return new ApiResult<>(presignedList);
+        log.info("downloadOriginalZip download link: {}", downloadLinks);
+        return new ApiResult<>(downloadLinks);
+    }
+
+    @GetMapping("downloadLocalFile")
+    public void downloadLocalFile(@RequestParam String path, javax.servlet.http.HttpServletResponse response) {
+        java.io.File file = new java.io.File(path);
+        if (!file.exists()) {
+             throw new ApiException(UsecaseCode.NOT_FOUND);
+        }
+
+        response.setContentType("application/octet-stream");
+        try {
+            String filename = java.net.URLEncoder.encode(file.getName(), "UTF-8");
+            response.setHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+            try (java.io.FileInputStream in = new java.io.FileInputStream(file);
+                 java.io.OutputStream out = response.getOutputStream()) {
+                byte[] buffer = new byte[4096];
+                int length;
+                while ((length = in.read(buffer)) > 0) {
+                    out.write(buffer, 0, length);
+                }
+            }
+        } catch (IOException e) {
+            log.error("Download local file error", e);
+            throw new ApiException(UsecaseCode.NOT_FOUND);
+        }
     }
 
     @GetMapping("export")
