@@ -294,6 +294,51 @@ public class MinioService {
             throw new RuntimeException("MinIO delete failed", e);
         }
     }
+    
+    /**
+     * Delete all objects with given prefix from MinIO
+     * This is used to delete entire dataset folders
+     *
+     * @param prefix Prefix to match (e.g., "datasetName/" to delete all files in dataset)
+     */
+    public void removeObjectsByPrefix(String prefix) {
+        try {
+            var bucketName = minioProp.getBucketName();
+            createBucket(bucketName);
+            
+            // List all objects with the given prefix
+            Iterable<io.minio.Result<io.minio.messages.Item>> results = extendMinioClient.listObjects(
+                io.minio.ListObjectsArgs.builder()
+                    .bucket(bucketName)
+                    .prefix(prefix)
+                    .recursive(true)
+                    .build()
+            );
+            
+            int deletedCount = 0;
+            for (io.minio.Result<io.minio.messages.Item> result : results) {
+                io.minio.messages.Item item = result.get();
+                String objectName = item.objectName();
+                
+                try {
+                    extendMinioClient.removeObject(
+                        RemoveObjectArgs.builder()
+                            .bucket(bucketName)
+                            .object(objectName)
+                            .build()
+                    );
+                    deletedCount++;
+                } catch (Exception e) {
+                    log.warn("Failed to delete object: {}", objectName, e);
+                }
+            }
+            
+            log.info("Deleted {} objects with prefix: {}", deletedCount, prefix);
+        } catch (Exception e) {
+            log.error("Failed to delete objects by prefix: {}", prefix, e);
+            throw new RuntimeException("MinIO prefix deletion failed", e);
+        }
+    }
 
     private String replaceUrl(String url) {
         var proto = "http";

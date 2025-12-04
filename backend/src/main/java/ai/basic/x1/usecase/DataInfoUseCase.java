@@ -241,13 +241,13 @@ public class DataInfoUseCase {
             throw new UsecaseException(UsecaseCode.DATASET_DATA_OTHERS_ANNOTATING);
         }
         var dataset = datasetDAO.getById(datasetId);
-        var dataInfoQueryBO = new DataInfoQueryBO();
-        dataInfoQueryBO.setDatasetId(datasetId);
-        dataInfoQueryBO.setPageNo(1);
-        dataInfoQueryBO.setPageSize(Integer.MAX_VALUE);
-        dataInfoQueryBO.setDatasetType(dataset.getType());
-        List<Long> dataIds = findExportDataIds(dataInfoQueryBO);
-        log.info("deleteBatch ids3: {}", dataIds);
+        // dataInfoQueryBO.setDatasetType(dataset.getType());
+        // List<Long> dataIds = findExportDataIds(dataInfoQueryBO);
+        var allDataInfoLambdaQueryWrapper = Wrappers.lambdaQuery(DataInfo.class);
+        allDataInfoLambdaQueryWrapper.select(DataInfo::getId);
+        allDataInfoLambdaQueryWrapper.eq(DataInfo::getDatasetId, datasetId);
+        List<Long> dataIds = dataInfoDAO.list(allDataInfoLambdaQueryWrapper).stream().map(DataInfo::getId).collect(Collectors.toList());
+        log.info("deleteBatch dataIds size: {}", dataIds.size());
         // a. DataInfo content에서 파일 수집 후 삭제
         List<Long> originalFileIds = new ArrayList<>();
         for (Long dataId : dataIds) {

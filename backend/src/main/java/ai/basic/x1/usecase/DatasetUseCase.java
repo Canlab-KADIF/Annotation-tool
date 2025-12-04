@@ -299,6 +299,13 @@ public class DatasetUseCase {
                         log.warn("Failed to delete files by fileUrls: {}", uploadFileUrls, e);
                     }
                 }
+            
+                // 3. Delete entire dataset folder from MinIO (cleanup empty folders)
+                try {
+                    fileUseCase.deleteDatasetFolder(dataset.getName());
+                } catch (Exception e) {
+                    log.warn("Failed to delete dataset folder: {}", dataset.getName(), e);
+                }
             })));
         }
 

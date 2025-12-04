@@ -27,6 +27,7 @@ import java.util.Set;
 import java.util.ArrayList;
 
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.StrUtil;
 
 /**
  * @author : fyb
@@ -100,8 +101,19 @@ public class FileUseCase {
         }
         for (var fileUrl : fileUrls) {
             try {
-                log.info("deleting fileUrl: {} ", fileUrl);
-                minioService.removeObject(fileUrl);
+                // Extract object name from URL (remove endpoint part)
+                String objectName = fileUrl;
+                if (fileUrl.contains("://")) {
+                    // URL format: http://endpoint/bucket/objectName
+                    String[] urlParts = fileUrl.split("/", 4);
+                    if (urlParts.length >= 4) {
+                        objectName = urlParts[3];  // Get objectName part
+                    }
+                }
+                
+                log.info("deleting fileUrl objectName: {} ", objectName);
+                minioService.removeObject(objectName);
+                log.info("Deleted file from MinIO: {}", objectName);
             } catch (Exception e) {
                 log.warn("Failed to delete fileUrl from MinIO: {}", fileUrl, e);
             }
@@ -118,16 +130,51 @@ public class FileUseCase {
 
         for (var file : files) {
             try {
-                // log.info("deleting file path: {} ", file.getPath());
+                // Try original path first
                 minioService.removeObject(file.getPath());
-            } catch (Exception e) {
-                log.warn("Failed to delete file from MinIO: {}", file.getPath(), e);
+                log.info("Deleted file from MinIO: {}", file.getPath());
+            } catch (Exception e1) {
+                // If original path fails, try translating to new format
+                try {
+                    String translatedPath = translateOldPathToNew(file.getPath());
+                    if (!translatedPath.equals(file.getPath())) {
+                        minioService.removeObject(translatedPath);
+                        log.info("Deleted file from MinIO using translated path: {}", translatedPath);
+                    } else {
+                        log.warn("Failed to delete file from MinIO (no translation available): {}", file.getPath(), e1);
+                    }
+                } catch (Exception e2) {
+                    log.warn("Failed to delete file from MinIO (both paths tried): {}", file.getPath(), e2);
+                }
             }
         }
 
         fileDAO.removeByIds(fileIds); // file 테이블 삭제
         log.info("DB에서 file 레코드 {}개 삭제 완료", fileIds.size());
     }
+    
+    /**
+     * Delete entire dataset folder from MinIO
+     * This removes all files and empty folders for a dataset
+     * 
+     * @param datasetName Name of the dataset
+     */
+    public void deleteDatasetFolder(String datasetName) {
+        if (StrUtil.isEmpty(datasetName)) {
+            return;
+        }
+        
+        try {
+            // Determine the correct prefix based on dataset name
+            var datasetPrefix = datasetName.endsWith("_raw") ? datasetName + "/" : datasetName + "/";
+            log.info("Deleting dataset folder from MinIO with prefix: {}", datasetPrefix);
+            minioService.removeObjectsByPrefix(datasetPrefix);
+            log.info("Successfully deleted dataset folder: {}", datasetName);
+        } catch (Exception e) {
+            log.warn("Failed to delete dataset folder from MinIO: {}", datasetName, e);
+        }
+    }
+    
     /**
      * Translate old path format to new format
      * Old: userId/datasetId/UUID/Scene_01/file.jpg
