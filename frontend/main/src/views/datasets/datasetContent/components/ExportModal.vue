@@ -205,9 +205,9 @@
             console.log("url: ", url);
             window.open(url, '_blank');
           });
-          message.success('원본 ZIP 다운로드가 시작되었습니다');
+          message.success('원본 ZIP 다운로드가 시작');
         } else {
-          message.warning('다운로드할 ZIP 파일이 없습니다');
+          message.warning('다운로드할 ZIP 파일이 없음');
         }
 
         closeModal();
@@ -222,7 +222,7 @@
         isLoading.value = true;
         const res = await exportData(fliterPa(data));
         message.success({
-          content: 'export data successed',
+          content: 'export data succeeded',
           duration: 5,
         });
         emit('setExportRecord', res);
