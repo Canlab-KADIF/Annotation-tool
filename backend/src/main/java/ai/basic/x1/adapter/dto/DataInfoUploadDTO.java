@@ -27,7 +27,6 @@ public class DataInfoUploadDTO {
      * Upload file url
      */
     @NotEmpty(message = "fileUrl is not null")
-    @URL(message = "invalid url")
     private String fileUrl;
 
     /**
