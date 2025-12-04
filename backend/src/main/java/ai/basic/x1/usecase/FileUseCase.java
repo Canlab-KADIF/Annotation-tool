@@ -128,11 +128,84 @@ public class FileUseCase {
         fileDAO.removeByIds(fileIds); // file 테이블 삭제
         log.info("DB에서 file 레코드 {}개 삭제 완료", fileIds.size());
     }
+    /**
+     * Translate old path format to new format
+     * Old: userId/datasetId/UUID/Scene_01/file.jpg
+     * New DB format: datasetName/raw/UUID/Scene_01/file.jpg
+     * MinIO format: datasetName/raw/Scene_01/file.jpg
+     */
+    public String translateOldPathToNew(String dbPath) {
+        // log.info("Translating path: {}", dbPath);
+        
+        // Check if already in MinIO format (no UUID between /raw/ and next folder)
+        if (dbPath.contains("/raw/")) {
+            // New format: datasetName/raw/UUID/Scene_01/file.jpg
+            // Need to remove UUID (3rd segment after /raw/)
+            String[] parts = dbPath.split("/");
+            
+            // Find /raw/ position
+            int rawIndex = -1;
+            for (int i = 0; i < parts.length; i++) {
+                if ("raw".equals(parts[i])) {
+                    rawIndex = i;
+                    break;
+                }
+            }
+            
+            if (rawIndex >= 0 && rawIndex + 1 < parts.length) {
+                // Check if next part after /raw/ is UUID (32 chars, hex)
+                String potentialUUID = parts[rawIndex + 1];
+                if (potentialUUID.length() == 32 && potentialUUID.matches("[a-f0-9]+")) {
+                    // This is UUID, remove it
+                    StringBuilder result = new StringBuilder();
+                    for (int i = 0; i < parts.length; i++) {
+                        if (i == rawIndex + 1) {
+                            continue;  // Skip UUID
+                        }
+                        if (i > 0 && !parts[i].isEmpty()) {
+                            result.append("/");
+                        }
+                        if (!parts[i].isEmpty()) {
+                            result.append(parts[i]);
+                        }
+                    }
+                    String translated = result.toString();
+                    // log.info("Translated path (removed UUID): {}", translated);
+                    return translated;
+                }
+            }
+            
+            // Already in MinIO format (no UUID)
+            // log.info("Path already in MinIO format: {}", dbPath);
+            return dbPath;
+        }
+        
+        if (dbPath.contains("/export_packages/")) {
+            // Export packages don't have UUID
+            log.info("Export packages path, no translation needed: {}", dbPath);
+            return dbPath;
+        }
+        
+        // Old format: userId/datasetId/UUID/...rest
+        // Extract the part after UUID (skip first 3 parts)
+        String[] parts = dbPath.split("/", 4);
+        if (parts.length < 4) {
+            log.warn("Cannot translate path (not enough parts): {}", dbPath);
+            return dbPath;  // Can't translate, return as-is
+        }
+        
+        // This is old format, we can't easily translate without dataset info
+        log.warn("Old format path, cannot translate without dataset context: {}", dbPath);
+        return dbPath;  // Return as-is
+    }
 
     private void setUrl(FileBO fileBO) {
         try {
-            fileBO.setInternalUrl(minioService.getInternalUrl(fileBO.getBucketName(), fileBO.getPath()));
-            fileBO.setUrl(minioService.getUrl(fileBO.getBucketName(), fileBO.getPath()));
+            // Translate DB path (with UUID) to MinIO path (without UUID)
+            String minioPath = translateOldPathToNew(fileBO.getPath());
+            
+            fileBO.setInternalUrl(minioService.getInternalUrl(fileBO.getBucketName(), minioPath));
+            fileBO.setUrl(minioService.getUrl(fileBO.getBucketName(), minioPath));
         } catch (Exception e) {
             log.error("Get url error", e);
             throw new UsecaseException("Get url error");

@@ -35,22 +35,34 @@ public class UploadUseCase {
         String cleanUrl = DecompressionFileUtils.removeUrlParameter(fileUrl);
         log.info("cleanUrl: {}", cleanUrl);
     
-        // Step 2: MinIO prefix
-        String minioPrefix = minioProp.getEndpoint() + minioProp.getBucketName() + "/";
-        // String minioPrefix = String.format("%s/%s/", StringUtils.stripEnd(minioProp.getEndpoint(), "/"), minioProp.getBucketName());
-
-        log.info("minioPrefix: {}", minioPrefix);
-    
-        // Step 3: objectName 추출
         String objectName;
-        if (cleanUrl.startsWith(minioPrefix)) {
-            objectName = cleanUrl.substring(minioPrefix.length());
+        String fileName;
+
+        // Check if this is a local file path
+        if (cleanUrl.startsWith("/")) {
+            // Local file mode: use the path directly
+            log.info("Local file path detected: {}", cleanUrl);
+            objectName = cleanUrl;
+            fileName = FileUtil.getName(cleanUrl);
         } else {
-            throw new RuntimeException("Invalid fileUrl: cannot extract object name.");
+            // MinIO URL mode: extract object name from MinIO URL
+            // Step 2: MinIO prefix
+            String minioPrefix = minioProp.getEndpoint() + minioProp.getBucketName() + "/";
+            // String minioPrefix = String.format("%s/%s/", StringUtils.stripEnd(minioProp.getEndpoint(), "/"), minioProp.getBucketName());
+
+            log.info("minioPrefix: {}", minioPrefix);
+        
+            // Step 3: objectName 추출
+            if (cleanUrl.startsWith(minioPrefix)) {
+                objectName = cleanUrl.substring(minioPrefix.length());
+            } else {
+                throw new RuntimeException("Invalid fileUrl: cannot extract object name.");
+            }
+        
+            // Step 4: 파일 이름 추출
+            fileName = FileUtil.getName(objectName);
         }
     
-        // Step 4: 파일 이름 추출
-        String fileName = FileUtil.getName(objectName);
         log.info("objectName: {}", objectName);
         log.info("fileName: {}", fileName);
     

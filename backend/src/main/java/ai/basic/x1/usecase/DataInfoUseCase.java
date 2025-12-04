@@ -579,7 +579,16 @@ public class DataInfoUseCase {
      * @param userId    user id
      */
     public PresignedUrlBO generatePresignedUrl(String fileName, Long datasetId, Long userId) {
-        var objectName = String.format("%s/%s/%s/%s", userId, datasetId, UUID.randomUUID().toString().replace("-", ""), fileName);
+        // Use new path format: datasetName/raw/fileName
+        var dataset = datasetDAO.getById(datasetId);
+        String objectName;
+        if (fileName.toLowerCase().endsWith(".zip")) {
+            // Upload zip files directly to export_packages folder
+            objectName = String.format("%s/export_packages/%s", dataset.getName(), fileName);
+        } else {
+            objectName = String.format("%s/raw/%s", dataset.getName(), fileName);
+        }
+        
         try {
             return minioService.generatePresignedUrl(minioProp.getBucketName(), objectName, Boolean.TRUE);
         } catch (Exception e) {

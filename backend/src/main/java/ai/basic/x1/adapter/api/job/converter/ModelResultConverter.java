@@ -118,21 +118,21 @@ public class ModelResultConverter {
 
         // GT_ 접두사 제거
         String rawModelClass = extendedObject.getModelClass();
-        String modelClassKey = null;
+        String modelClassKey = rawModelClass;
 
-        if (rawModelClass != null) {
-            switch (rawModelClass) {
-                case "GT_CAR":
-                    modelClassKey = "Car";
-                    break;
-                case "GT_PED":
-                    modelClassKey = "Pedestrian";
-                    break;
-                default:
-                    modelClassKey = rawModelClass.replaceFirst("^GT_", "");
-                    break;
-            }
-        }
+        // if (rawModelClass != null) {
+        //     switch (rawModelClass) {
+        //         case "GT_CAR":
+        //             modelClassKey = "Car";
+        //             break;
+        //         case "GT_PED":
+        //             modelClassKey = "Pedestrian";
+        //             break;
+        //         default:
+        //             modelClassKey = rawModelClass.replaceFirst("^GT_", "");
+        //             break;
+        //     }
+        // }
 
         String modelClassName = null;
         if (StrUtil.isNotEmpty(modelClassKey)) {
@@ -141,9 +141,13 @@ public class ModelResultConverter {
             if (mc != null) {
                 modelClassName = mc.getName();
                 // log.info("raw model class: {}, Mapping model class key: {}, found ModelClass: {}", rawModelClass, modelClassKey, modelClassName);
+            } else {
+                modelClassName = modelClassKey;
             }
         }
 
+        // log.info("extendedObject.getModelConfidence(): {}", extendedObject.getModelConfidence());
+        // log.info("modelClassKey: {}, modelClassName: {}", modelClassKey, modelClassName);
         ObjectBO objectBO = ObjectBO.builder()
                 .confidence(extendedObject.getModelConfidence())
                 .type("3D_BOX")

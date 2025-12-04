@@ -157,11 +157,14 @@ public class UploadDataUseCase {
     @Transactional(rollbackFor = RuntimeException.class)
     public Long upload(DataInfoUploadBO dataInfoUploadBO) {
         var uploadRecordBO = uploadUseCase.createUploadRecord(dataInfoUploadBO.getFileUrl(), dataInfoUploadBO.getDatasetId());
-        var boo = DecompressionFileUtils.validateUrl(dataInfoUploadBO.getFileUrl());
-        if (!boo) {
-            uploadUseCase.updateUploadRecordStatus(uploadRecordBO.getId(), FAILED, DATASET_DATA_FILE_URL_ERROR.getMessage());
-            log.error("File url error,datasetId:{},userId:{},fileUrl:{}", dataInfoUploadBO.getDatasetId(), dataInfoUploadBO.getUserId(), dataInfoUploadBO.getFileUrl());
-            return uploadRecordBO.getSerialNumber();
+        // Skip URL validation for local files
+        if (!dataInfoUploadBO.getFileUrl().startsWith("/")) {
+            var boo = DecompressionFileUtils.validateUrl(dataInfoUploadBO.getFileUrl());
+            if (!boo) {
+                uploadUseCase.updateUploadRecordStatus(uploadRecordBO.getId(), FAILED, DATASET_DATA_FILE_URL_ERROR.getMessage());
+                log.error("File url error,datasetId:{},userId:{},fileUrl:{}", dataInfoUploadBO.getDatasetId(), dataInfoUploadBO.getUserId(), dataInfoUploadBO.getFileUrl());
+                return uploadRecordBO.getSerialNumber();
+            }
         }
         var dataset = datasetDAO.getById(dataInfoUploadBO.getDatasetId());
         if (ObjectUtil.isNull(dataset)) {
@@ -208,45 +211,77 @@ public class UploadDataUseCase {
         var path = DecompressionFileUtils.removeUrlParameter(fileUrl);
         dataInfoUploadBO.setFileName(FileUtil.getPrefix(path));
         var baseSavePath = String.format("%s%s/", tempPath, UUID.randomUUID().toString().replace("-", ""));
-        var savePath = baseSavePath + FileUtil.getName(path);
-        FileUtil.mkParentDirs(savePath);
-        // Download the compressed package locally
-        log.info("Get compressed package start fileUrl:{},savePath:{}", fileUrl, savePath);
-        HttpUtil.downloadFileFromUrl(fileUrl, FileUtil.newFile(savePath), new StreamProgress() {
-            @Override
-            public void start() {
+        
+        // Download archive file OUTSIDE of baseSavePath to prevent it from being uploaded to raw folder
+        var archivePath = String.format("%s%s_%s", tempPath, UUID.randomUUID().toString().replace("-", ""), FileUtil.getName(path));
+        
+        FileUtil.mkParentDirs(archivePath);
+        
+        if (fileUrl.startsWith("/")) {
+            // Local file mode: Copy directly
+            log.info("Local file detected. Copying from {} to {}", fileUrl, archivePath);
+            try {
                 uploadUseCase.updateUploadRecordStatus(dataInfoUploadBO.getUploadRecordId(), DOWNLOADING, null);
-            }
-
-            @Override
-            public void progress(long total, long progressSize) {
-                if (progressSize % PROCESS_VALUE_SIZE == 0 || total == progressSize) {
-                    var uploadRecord = UploadRecord.builder()
-                            .id(dataInfoUploadBO.getUploadRecordId())
-                            .status(DOWNLOADING)
-                            .totalFileSize(total)
-                            .downloadedFileSize(progressSize).build();
-                    uploadRecordDAO.updateById(uploadRecord);
-                }
-            }
-
-            @Override
-            public void finish() {
+                FileUtil.copy(FileUtil.file(fileUrl), FileUtil.file(archivePath), true);
                 uploadUseCase.updateUploadRecordStatus(dataInfoUploadBO.getUploadRecordId(), DOWNLOAD_COMPLETED, null);
+            } catch (Exception e) {
+                log.error("Failed to copy local file", e);
+                uploadUseCase.updateUploadRecordStatus(dataInfoUploadBO.getUploadRecordId(), FAILED, "Failed to copy local file");
+                return;
             }
-        });
-        log.info("Get compressed package end fileUrl:{},savePath:{}", fileUrl, savePath);
-        dataInfoUploadBO.setSavePath(savePath);
+        } else {
+            // URL mode: Download via HTTP
+            log.info("Get compressed package start fileUrl:{},archivePath:{}", fileUrl, archivePath);
+            HttpUtil.downloadFileFromUrl(fileUrl, FileUtil.newFile(archivePath), new StreamProgress() {
+                @Override
+                public void start() {
+                    uploadUseCase.updateUploadRecordStatus(dataInfoUploadBO.getUploadRecordId(), DOWNLOADING, null);
+                }
+
+                @Override
+                public void progress(long total, long progressSize) {
+                    if (progressSize % PROCESS_VALUE_SIZE == 0 || total == progressSize) {
+                        var uploadRecord = UploadRecord.builder()
+                                .id(dataInfoUploadBO.getUploadRecordId())
+                                .status(DOWNLOADING)
+                                .totalFileSize(total)
+                                .downloadedFileSize(progressSize).build();
+                        uploadRecordDAO.updateById(uploadRecord);
+                    }
+                }
+
+                @Override
+                public void finish() {
+                    uploadUseCase.updateUploadRecordStatus(dataInfoUploadBO.getUploadRecordId(), DOWNLOAD_COMPLETED, null);
+                }
+            });
+            log.info("Get compressed package end fileUrl:{},archivePath:{}", fileUrl, archivePath);
+        }
+        dataInfoUploadBO.setSavePath(archivePath);
         dataInfoUploadBO.setBaseSavePath(baseSavePath);
         // A single image does not need to be decompressed
         if (IMAGE_DATA_TYPE.contains(FileUtil.getMimeType(path))) {
             function.accept(dataInfoUploadBO);
             FileUtil.clean(baseSavePath);
+            FileUtil.del(archivePath);
             return;
         }
-        // Unzip files
-        log.info("Start decompression,datasetId:{},filePath:{}", datasetId, savePath);
-        DecompressionFileUtils.decompress(savePath, baseSavePath);
+        
+
+        
+        // Unzip files into baseSavePath (archive is outside, so won't be included)
+        log.info("Start decompression,datasetId:{},archivePath:{}, baseSavePath{}", datasetId, archivePath, baseSavePath);
+        DecompressionFileUtils.decompress(archivePath, baseSavePath);
+        
+        // Delete archive file immediately after decompression
+        log.info("Deleting archive file: {}", archivePath);
+        boolean deleted = FileUtil.del(archivePath);
+        if (deleted) {
+            log.info("Successfully deleted archive file: {}", archivePath);
+        } else {
+            log.warn("Failed to delete archive file: {}", archivePath);
+        }
+        
         function.accept(dataInfoUploadBO);
         FileUtil.clean(baseSavePath);
     }
@@ -287,7 +322,11 @@ public class UploadDataUseCase {
             log.error("Duplicate data name", e);
             errorBuilder.append("Duplicate data name;");
         }
-        var rootPath = String.format("%s/%s", userId, datasetId);
+        // Use dataset name instead of userId/datasetId
+        var dataset = datasetDAO.getById(datasetId);
+        // Avoid duplicate 'raw' if dataset name already ends with '_raw'
+        var datasetName = dataset.getName();
+        var rootPath = datasetName.endsWith("_raw") ? datasetName : String.format("%s/raw", datasetName);
         var newSavePath = tempPath + fileBO.getPath().replace(rootPath, "");
         FileUtil.copy(dataInfoUploadBO.getSavePath(), newSavePath, true);
         createUploadThumbnail(userId, fileBOS, rootPath);
@@ -302,7 +341,11 @@ public class UploadDataUseCase {
         var userId = dataInfoUploadBO.getUserId();
         var datasetId = dataInfoUploadBO.getDatasetId();
         var files = FileUtil.loopFiles(Paths.get(dataInfoUploadBO.getBaseSavePath()), 10, textFileFilter);
-        var rootPath = String.format("%s/%s", userId, datasetId);
+        // Use dataset name instead of userId/datasetId
+        var dataset = datasetDAO.getById(datasetId);
+        // Avoid duplicate 'raw' if dataset name already ends with '_raw'
+        var datasetName = dataset.getName();
+        var rootPath = datasetName.endsWith("_raw") ? datasetName : String.format("%s/raw", datasetName);
         var errorBuilder = new StringBuilder();
         var dataInfoBOBuilder = DataInfoBO.builder().datasetId(datasetId)
                 .parentId(Constants.DEFAULT_PARENT_ID)
@@ -439,7 +482,11 @@ public class UploadDataUseCase {
         // Get the parent folder whose folder name is image_. If it is a point cloud, it contains lidar_point_cloud_parent folder.
         var sceneFileList = new HashSet<File>();
         sceneFileListConsumer.accept(dataInfoUploadBO.getBaseSavePath(), sceneFileList);
-        var rootPath = String.format("%s/%s", userId, datasetId);
+        // Use dataset name instead of userId/datasetId
+        var dataset = datasetDAO.getById(datasetId);
+        // Avoid duplicate 'raw' if dataset name already ends with '_raw'
+        var datasetName = dataset.getName();
+        var rootPath = datasetName.endsWith("_raw") ? datasetName : String.format("%s/raw", datasetName);
         log.info("Get point_cloud datasetId:{},size:{}", datasetId, sceneFileList.size());
         if (CollectionUtil.isEmpty(sceneFileList)) {
             log.error("The format of the compression package is incorrect. It must contain point_cloud_ or image,userId:{},datasetId:{},fileUrl:{}",
@@ -634,15 +681,54 @@ public class UploadDataUseCase {
     @Transactional(rollbackFor = Exception.class)
     public Long saveScene(File file, DataInfoUploadBO uploadDataBO) {
         var fileName = FileUtil.getName(file);
+        var datasetId = uploadDataBO.getDatasetId();
+        var userId = uploadDataBO.getUserId();
+        
+        // Option 1: If Scene folder exists, use it as-is
         if (fileName.toLowerCase().startsWith(Constants.SCENE)) {
-            var datasetId = uploadDataBO.getDatasetId();
-            var userId = uploadDataBO.getUserId();
-            var dataInfo = DataInfo.builder().datasetId(datasetId).name(fileName).orderName(NaturalSortUtil.convert(fileName)).parentId(Constants.DEFAULT_PARENT_ID)
-                    .type(ItemTypeEnum.SCENE).createdBy(userId).createdAt(OffsetDateTime.now()).parentId(null).build();
+            var dataInfo = DataInfo.builder()
+                    .datasetId(datasetId)
+                    .name(fileName)
+                    .orderName(NaturalSortUtil.convert(fileName))
+                    .parentId(Constants.DEFAULT_PARENT_ID)
+                    .type(ItemTypeEnum.SCENE)
+                    .createdBy(userId)
+                    .createdAt(OffsetDateTime.now())
+                    .parentId(null)
+                    .build();
             dataInfoDAO.save(dataInfo);
+            log.info("Created Scene from folder: {}", fileName);
             return dataInfo.getId();
         }
-        return Constants.DEFAULT_PARENT_ID;
+        
+        // Option 2: No Scene folder - create virtual Scene using dataset name
+        var dataset = datasetDAO.getById(datasetId);
+        var virtualSceneName = dataset.getName();
+        
+        // Check if virtual Scene already exists
+        var existingScene = dataInfoDAO.getOne(Wrappers.lambdaQuery(DataInfo.class)
+                .eq(DataInfo::getDatasetId, datasetId)
+                .eq(DataInfo::getName, virtualSceneName)
+                .eq(DataInfo::getType, ItemTypeEnum.SCENE));
+        
+        if (existingScene != null) {
+            log.info("Using existing virtual Scene: {}", virtualSceneName);
+            return existingScene.getId();
+        }
+        
+        // Create new virtual Scene
+        var virtualScene = DataInfo.builder()
+                .datasetId(datasetId)
+                .name(virtualSceneName)
+                .orderName(NaturalSortUtil.convert(virtualSceneName))
+                .type(ItemTypeEnum.SCENE)
+                .createdBy(userId)
+                .createdAt(OffsetDateTime.now())
+                .parentId(null)
+                .build();
+        dataInfoDAO.save(virtualScene);
+        log.info("Created virtual Scene: {}", virtualSceneName);
+        return virtualScene.getId();
     }
 
     /**
@@ -853,17 +939,44 @@ public class UploadDataUseCase {
      */
     public List<FileBO> uploadFileList(String rootPath, List<File> files, DataInfoUploadBO dataInfoUploadBO) {
         var bucketName = minioProp.getBucketName();
+        // Filter out archive files, hidden files, and system files
+        List<File> filteredFiles = files.stream().filter(file -> {
+            String fileName = file.getName().toLowerCase();
+            String absolutePath = file.getAbsolutePath();
+            boolean isExcluded = fileName.endsWith(".zip") || 
+                   fileName.endsWith(".tar") || 
+                   fileName.endsWith(".tar.gz") || 
+                   fileName.endsWith(".tar.bz2") || 
+                   fileName.startsWith(".") ||
+                   fileName.contains("xl.meta") ||
+                   fileName.equals("thumbs.db") ||
+                   fileName.startsWith("part.") ||
+                   absolutePath.contains("__MACOSX");
+            
+            if (isExcluded) {
+                return false;
+            }
+            return true;
+        }).collect(Collectors.toList());
+
         try {
-            minioService.uploadFileList(bucketName, rootPath, tempPath, files);
+            if (filteredFiles.isEmpty()) {
+                return new ArrayList<>();
+            }
+            minioService.uploadFileList(bucketName, rootPath, tempPath, filteredFiles);
         } catch (Exception e) {
-            log.error("Batch upload file error,filesPath:{}", JSONUtil.parseArray(files.stream().map(File::getAbsolutePath).collect(Collectors.toList())), e);
+            log.error("Batch upload file error", e);
         }
 
         var fileBOS = new ArrayList<FileBO>();
-        files.forEach(file -> {
+        filteredFiles.forEach(file -> {
             var startingPosition = FileUtil.getAbsolutePath(FileUtil.file(dataInfoUploadBO.getBaseSavePath()).getAbsolutePath()).length() + 1;
             var zipPath = FileUtil.getAbsolutePath(file.getAbsolutePath()).substring(startingPosition);
-            var path = String.format("%s%s", rootPath, FileUtil.getAbsolutePath(file.getAbsolutePath()).replace(FileUtil.getAbsolutePath(FileUtil.file(tempPath).getAbsolutePath()), ""));
+            
+            // Keep UUID in DB path for uniqueness (path_hash), MinIO will remove it
+            String relativePath = FileUtil.getAbsolutePath(file.getAbsolutePath()).replace(FileUtil.getAbsolutePath(FileUtil.file(tempPath).getAbsolutePath()), "");
+            var path = rootPath + relativePath;  // Includes UUID: datasetName/raw/UUID/Scene_01/file.jpg
+            
             zipPath = zipPath.startsWith(dataInfoUploadBO.getFileName()) ? zipPath : String.format("%s/%s", dataInfoUploadBO.getFileName(), zipPath);
             var mimeType = FileUtil.getMimeType(path);
             var fileBO = FileBO.builder().name(file.getName()).originalName(file.getName()).bucketName(bucketName)
@@ -934,7 +1047,8 @@ public class UploadDataUseCase {
     }
 
     public void handelPointCloudConvertRender(FileBO pcdFileBO) {
-        String filePath = pcdFileBO.getPath();
+        // Translate DB path (with UUID) to MinIO path (without UUID)
+        String filePath = fileUseCase.translateOldPathToNew(pcdFileBO.getPath());
         String basePath = "";
         String fileName;
         String binaryFileName = "";

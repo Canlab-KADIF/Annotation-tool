@@ -134,12 +134,34 @@ public class MinioService {
         createBucket(bucketName);
         List<SnowballObject> objects = new ArrayList<>(fileList.size());
         int startingPosition = FileUtil.getAbsolutePath(FileUtil.file(tempPath).getAbsolutePath()).length();
-        fileList.forEach(file -> objects.add(
-                new SnowballObject(
-                        rootPath + FileUtil.getAbsolutePath(file.getAbsolutePath()).substring(startingPosition),
-                        FileUtil.getInputStream(file),
-                        file.length(),
-                        null)));
+        
+        fileList.forEach(file -> {
+            // Get the relative path from tempPath
+            String relativePath = FileUtil.getAbsolutePath(file.getAbsolutePath()).substring(startingPosition);
+            
+            // Skip the first folder (UUID hash folder) and keep from Scene folder onwards
+            // Example: /UUID/Scene_01/camera_config/file.jpg -> /Scene_01/camera_config/file.jpg
+            String[] pathParts = relativePath.split("/", 3); // Split into max 3 parts
+            String cleanPath;
+            if (pathParts.length >= 3) {
+                // Skip pathParts[0] (empty) and pathParts[1] (UUID), keep pathParts[2] onwards
+                cleanPath = "/" + pathParts[2];
+            } else if (pathParts.length == 2) {
+                // Only UUID folder, keep the file
+                cleanPath = "/" + pathParts[1];
+            } else {
+                // Fallback to original path
+                cleanPath = relativePath;
+            }
+            
+            String finalPath = rootPath + cleanPath;
+            objects.add(new SnowballObject(
+                    finalPath,
+                    FileUtil.getInputStream(file),
+                    file.length(),
+                    null));
+        });
+        
         extendMinioClient.uploadSnowballObjects(UploadSnowballObjectsArgs.builder()
                 .bucket(bucketName)
                 .objects(objects)
