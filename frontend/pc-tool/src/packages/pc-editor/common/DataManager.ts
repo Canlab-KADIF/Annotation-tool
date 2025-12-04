@@ -266,10 +266,11 @@ export default class DataManager {
 
             // ontology 색상 적용
             // console.log("editor.state: ", this.editor.state);
-            const classInfo = editor.state.classTypes.find(
-                c => c.name === userData.modelClass || c.name === userData.classType
-            );
-            const color = classInfo ? classInfo.color : '#ffffff';
+            // const classInfo = editor.state.classTypes.find(
+            //     c => c.name === userData.modelClass || c.name === userData.classType
+            // );
+            // const color = classInfo ? classInfo.color : '#ffffff';
+            const color = this.editor.getClassColor(userData);
             // console.log("color value: ", color);
 
             if (e instanceof Box) {

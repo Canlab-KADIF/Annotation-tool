@@ -315,7 +315,8 @@ export default function useInstance() {
             }
 
             if (!classMap[classMapId]) {
-                let color = classConfig ? classConfig.color : '#ffffff';
+                // let color = classConfig ? classConfig.color : '#ffffff';
+                let color = editor.getClassColor(userData);
                 let insList: IClass = {
                     key: classMapId,
                     classId: classId,

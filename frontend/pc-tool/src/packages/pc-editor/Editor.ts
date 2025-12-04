@@ -43,6 +43,7 @@ import * as locale from './lang';
 import * as utils from './utils';
 import { RegisterFn, ModalFn, MsgFn, ConfirmFn, LoadingFn } from './uitype';
 import TaskManager from './common/TaskManager/TaskManager';
+import { defaultClassColors } from './config/defaultClassColors';
 
 type LocaleType = typeof locale;
 
@@ -286,13 +287,14 @@ export default class Editor extends THREE.EventDispatcher {
             if (frame) frame.needSave = true;
 
             let userData = this.getObjectUserData(obj);
-            let classConfig = this.getClassType(userData);
+            // let classConfig = this.getClassType(userData);
+            let color = this.getClassColor(userData);
 
             if (obj instanceof Box) {
                 // obj.editConfig.resize = !userData.isStandard && userData.resultType !== Const.Fixed;
-                obj.color.setStyle(classConfig ? classConfig.color : '#ffffff');
+                obj.color.setStyle(color);
             } else {
-                obj.color = classConfig ? classConfig.color : '#ffffff';
+                obj.color = color;
             }
 
             // obj.dashed = !!userData.invisibleFlag;
@@ -319,7 +321,30 @@ export default class Editor extends THREE.EventDispatcher {
             return this.classMap.get(name + '') as IClassType;
         }
     }
-    async getResultSources(frame?: IFrame): Promise<void> {}
+
+    getClassColor(name: string | IUserData): string {
+        // 1. Try to get from ontology (classMap)
+        const classConfig = this.getClassType(name);
+        if (classConfig && classConfig.color) {
+            return classConfig.color;
+        }
+
+        // 2. Try to get from default colors
+        let className = '';
+        if (name instanceof Object) {
+            className = name.classType || name.modelClass || '';
+        } else {
+            className = name;
+        }
+
+        if (className && defaultClassColors[className]) {
+            return defaultClassColors[className];
+        }
+
+        // 3. Fallback to white
+        return '#ffffff';
+    }
+    async getResultSources(frame?: IFrame): Promise<void> { }
     setSources(sources: IResultSource[]) {
         if (!sources) return;
         let { FILTER_ALL, withoutTaskId } = this.state.config;
