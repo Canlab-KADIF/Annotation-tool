@@ -23,7 +23,7 @@ services:
     ports:
       - 8191:3306
     volumes:
-      - mysql-data:/var/lib/mysql
+      - /home/keti-hw/docker-data/gkes_merge/annotation_tool/mysql:/var/lib/mysql
       - ./deploy/mysql/custom.cnf:/etc/mysql/conf.d/custom.cnf
       - ./deploy/mysql/migration:/docker-entrypoint-initdb.d
       - /etc/localtime:/etc/localtime:ro
@@ -40,7 +40,7 @@ services:
     environment:
       TZ: Asia/Seoul
     volumes:
-      - redis-data:/data
+      - /home/keti-hw/docker-data/gkes_merge/annotation_tool/redis:/data
       - /etc/localtime:/etc/localtime:ro
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
@@ -48,19 +48,35 @@ services:
       timeout: 10s
       start_period: 10s
       retries: 10
+  # IMPORTANT: MinIO Access Configuration for point-cloud-object-detection service:
+  #
+  # OPTION 1 (Recommended - Secure): Use MinIO credentials in the service code
+  #   - The service already has MINIO_ACCESS_KEY, MINIO_SECRET_KEY, and MINIO_ENDPOINT configured
+  #   - Modify the service to use MinIO SDK (e.g., minio-py) with these credentials
+  #   - No public bucket policy needed - keeps data private
+  #
+  # OPTION 2 (Less Secure): Set public download policy on data-storage bucket
+  #   docker exec -it $(docker ps -q -f name=minio) mc alias set myminio http://localhost:9000 admin 1tQB970y
+  #   docker exec -it $(docker ps -q -f name=minio) mc anonymous set download myminio/data-storage
+  #   - This allows anyone with network access to download files from data-storage bucket
+  #   - Only use if the service cannot be modified to use credentials
   minio:
-    image: bitnami/minio:2022.9.1
+    # image: bitnami/minio:2022.9.1
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    user: "0"
     environment:
       MINIO_ROOT_USER: admin
       MINIO_ROOT_PASSWORD: 1tQB970y
-      MINIO_DEFAULT_BUCKETS: xtreme1:download
+      MINIO_DEFAULT_BUCKETS: data-storage:download
       TZ: Asia/Seoul
+      # BITNAMI_MOUNTED_BY_ROOT: true 
     ports:
       - 8193:9000
       - 8194:9001
     volumes:
-      - minio-data:/data
+      - /media/keti-hw/T9/gkes_merge/annotation_tool/xtreme1:/data
       - /etc/localtime:/etc/localtime:ro
+    command: server /data --console-address ":9001"
     healthcheck:
       test:
         [
@@ -78,9 +94,9 @@ services:
     # By default, Compose will pull image from Docker Hub when no local image found.
     # image: basicai/xtreme1-backend:v0.9.1
     # pull_policy: never
-
-    image: xtreme1-backend
-    pull_policy: never
+    # image: xtreme1-backend:latest
+    image: gkes-merge-backend:latest
+    # pull_policy: never
     # Uncomment this line and comment previous line to build image locally, not pull from Docker Hub.
     # build: ./backend
     ports:
@@ -91,6 +107,7 @@ services:
     # Using customized application.yml to override default configs.
       - ./backend/src/main/resources/application.yml:/app/config/application.yml
       - /etc/localtime:/etc/localtime:ro
+      - ${MOUNTED_DATA_PATH}:${MOUNTED_DATA_PATH}
     healthcheck:
       test:
         [
@@ -117,6 +134,8 @@ services:
     pull_policy: never
     # Uncomment this line and comment previous line to build image locally, not pull from Docker Hub.
     # build: ./frontend
+    # image: xtreme1-frontend:latest
+    image: gkes-merge-frontend:latest
     ports:
       - 8291:80
     environment:
@@ -124,8 +143,11 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
   pcd-tools:
-    image: basicai/xtreme1-pcd-tools
-    pull_policy: always
+    image: keti/xtreme1-pcd-tools
+    entrypoint: [ "python", "app.py" ]
+
+    # image: basicai/xtreme1-pcd-tools
+    # pull_policy: never
     ports:
       - 8295:5000
     environment:
@@ -139,7 +161,7 @@ services:
   #     - 8294:5000
   # image-object-detection:
   #   image: basicai/xtreme1-image-object-detection
-  #   pull_policy: always
+  #   pull_policy: never
   #   ports:
   #     - 8292:5000
   #   # You need to explicitly specify model profile to start this service.
@@ -147,18 +169,23 @@ services:
   #     - model
   #   runtime: nvidia
   point-cloud-object-detection:
-    # image: basicai/xtreme1-point-cloud-object-detection
+    # image: nvidia/cuda:12.1.0-devel-ubuntu20.04-custom
     # pull_policy: never
 
-    image: nvidia/cuda:12.1.0-devel-ubuntu20.04-custom
-    pull_policy: never
-
-    #250331, ms3d test 
-    # image: ms3d_annos_docker_test:latest
+    # ms3d test 
+    image: ms3d_annos_docker_test:latest
     # pull_policy: never
 
     ports:
       - 8293:5000
+    environment:
+      TZ: Asia/Seoul
+      MINIO_ACCESS_KEY: admin
+      MINIO_SECRET_KEY: 1tQB970y
+      MINIO_ENDPOINT: http://minio:9000
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /home/keti-hw/ms3d:/home/ms3d-docker
     # You need to explicitly specify model profile to start this service.
     profiles:
       - model

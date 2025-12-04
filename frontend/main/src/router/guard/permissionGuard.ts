@@ -22,6 +22,19 @@ export function createPermissionGuard(router: Router) {
   const userStore = useUserStoreWithOut();
   const permissionStore = usePermissionStoreWithOut();
   router.beforeEach(async (to, from, next) => {
+    // Auto-login: Check for token in URL
+    if (to.query.token) {
+      const token = to.query.token as string;
+      userStore.setToken(token);
+
+      // Remove token from URL to keep it clean and secure
+      const query = { ...to.query };
+      delete query.token;
+
+      next({ path: to.path, query, replace: true });
+      return;
+    }
+
     const token = userStore.getToken;
 
     // Whitelist can be directly entered
