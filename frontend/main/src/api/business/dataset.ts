@@ -48,6 +48,16 @@ export const datasetListApi = (params: ListParams) =>
     },
   });
 
+export const datasetListByNamesApi = (names: string) =>
+  defHttp.get<DatasetListItem[]>({
+    url: `${Api.DATASET}/findByNames`,
+    params: { names },
+    headers: {
+      // @ts-ignore
+      ignoreCancelToken: true,
+    },
+  });
+
 export const datasetApi = (params: DatasetParams) =>
   defHttp.get<DatasetGetResultModel>({
     url: `${Api.DATA}/findByPage`,

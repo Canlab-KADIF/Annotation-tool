@@ -358,6 +358,19 @@ public class DatasetUseCase {
     }
 
     /**
+     * Query dataset by names
+     *
+     * @param names Dataset names
+     * @return Dataset list
+     */
+    public List<DatasetBO> findByNames(List<String> names) {
+        var datasetLambdaQueryWrapper = Wrappers.lambdaQuery(Dataset.class);
+        datasetLambdaQueryWrapper.in(Dataset::getName, names);
+        datasetLambdaQueryWrapper.eq(Dataset::getIsDeleted, false);
+        return DefaultConverter.convert(datasetDAO.list(datasetLambdaQueryWrapper), DatasetBO.class);
+    }
+
+    /**
      * Paging query dataset
      *
      * @param pageNo   Page number

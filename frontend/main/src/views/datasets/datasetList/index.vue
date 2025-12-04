@@ -97,7 +97,7 @@
   import { useDesign } from '/@/hooks/web/useDesign';
   import { Button, ButtonSize } from '/@@/Button';
   import { Input, Select, Radio } from 'ant-design-vue';
-  import { datasetListApi } from '/@/api/business/dataset';
+  import { datasetListApi, datasetListByNamesApi } from '/@/api/business/dataset';
   import {
     DatasetListItem,
     DatasetListGetResultModel,
@@ -120,6 +120,9 @@
   import { useLoading } from '/@/components/Loading';
   import Icon, { SvgIcon } from '/@/components/Icon';
   import { useFlowLayout } from '/@/hooks/web/useFlowLayout';
+  import { useRoute } from 'vue-router';
+
+  const route = useRoute();
   const annotationStatus = ref<any>();
   const start = ref<Nullable<Dayjs>>(null);
   const type = ref<Nullable<string>>(null);
@@ -137,6 +140,16 @@
   const total = ref<number>(0);
   const pageNo = ref<number>(1);
   const listPage = ref();
+
+  // Parse dataset names from URL query parameter
+  const filterDatasetNames = ref<string[]>([]);
+  if (route.query.datasetNames) {
+    const namesParam = Array.isArray(route.query.datasetNames) 
+      ? route.query.datasetNames[0] 
+      : route.query.datasetNames;
+    filterDatasetNames.value = namesParam.split(',').map(name => name.trim()).filter(Boolean);
+    console.log('Filtering datasets by names:', filterDatasetNames.value);
+  }
 
   const typeFilter = [
     { label: 'Lidar Fusion', value: datasetTypeEnum.LIDAR_FUSION },
@@ -212,19 +225,41 @@
           : undefined,
     };
     try {
-      if (fetchType) {
-        const res: DatasetListGetResultModel = await datasetListApi(params);
-        list.value = list.value.concat(res.list);
-        if (res.list.length === 0) {
-          canload.value = false;
+      // Check if we should filter by dataset names (Server-side filtering)
+      if (filterDatasetNames.value.length > 0) {
+        // Use the new backend API for filtering
+        const names = filterDatasetNames.value.join(',');
+        const res = await datasetListByNamesApi(names);
+        
+        if (fetchType) {
+          list.value = list.value.concat(res);
+        } else {
+          list.value = res;
         }
-        total.value = res.total;
+        
+        // Since this API returns a list directly, we calculate total from list length
+        total.value = res.length;
+        
+        // Disable load more since we got all filtered results at once
+        canload.value = false;
       } else {
-        const res: DatasetListGetResultModel = await datasetListApi(params);
-        list.value = res.list;
-        total.value = res.total;
+        // Default behavior: fetch all datasets with pagination
+        if (fetchType) {
+          const res: DatasetListGetResultModel = await datasetListApi(params);
+          list.value = list.value.concat(res.list);
+          if (res.list.length === 0) {
+            canload.value = false;
+          }
+          total.value = res.total;
+        } else {
+          const res: DatasetListGetResultModel = await datasetListApi(params);
+          list.value = res.list;
+          total.value = res.total;
+        }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error('Error fetching dataset list:', e);
+    }
     closeFullLoading();
   };
 

@@ -69,6 +69,34 @@ public class DatasetController extends BaseDatasetController {
         return DefaultConverter.convert(datasetUseCase.findByType(datasetTypes), DatasetDTO.class);
     }
 
+    @GetMapping("findByNames")
+    public List<DatasetDTO> findByNames(@NotEmpty(message = "names cannot be null") @RequestParam(required = false) List<String> names) {
+        var datasetBOList = datasetUseCase.findByNames(names);
+        if (CollectionUtil.isEmpty(datasetBOList)) {
+            return new ArrayList<>();
+        }
+        
+        var datasetIds = datasetBOList.stream().map(DatasetBO::getId).collect(Collectors.toList());
+        var datasetStatisticsMap = dataInfoUsecase.getDatasetStatisticsByDatasetIds(datasetIds);
+        dataInfoUsecase.setDatasetSixData(datasetBOList);
+        
+        return datasetBOList.stream().map(datasetBO -> {
+            var datasetDTO = DefaultConverter.convert(datasetBO, DatasetDTO.class);
+            var datasetStatisticsBO = datasetStatisticsMap.get(datasetBO.getId());
+            if (ObjectUtil.isNotNull(datasetStatisticsBO)) {
+                datasetDTO.setAnnotatedCount(datasetStatisticsBO.getAnnotatedCount());
+                datasetDTO.setNotAnnotatedCount(datasetStatisticsBO.getNotAnnotatedCount());
+                datasetDTO.setInvalidCount(datasetStatisticsBO.getInvalidCount());
+                datasetDTO.setItemCount(datasetStatisticsBO.getItemCount());
+            }
+            if (CollectionUtil.isNotEmpty(datasetBO.getDatas())) {
+                var dataInfoDTOS = new ArrayList<DataInfoDTO>();
+                datasetBO.getDatas().forEach(dataInfoBO -> dataInfoDTOS.add(convertDataInfoDTO(dataInfoBO)));
+                datasetDTO.setDatas(dataInfoDTOS);
+            }
+            return datasetDTO;
+        }).collect(Collectors.toList());
+    }
     @GetMapping("findByPage")
     public Page<DatasetDTO> findByPage(@RequestParam(defaultValue = "1") Integer pageNo,
                                        @RequestParam(defaultValue = "10") Integer pageSize,

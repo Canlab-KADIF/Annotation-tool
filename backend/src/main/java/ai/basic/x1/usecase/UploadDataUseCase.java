@@ -1112,6 +1112,7 @@ public class UploadDataUseCase {
         dataInfoLambdaQueryWrapper.eq(DataInfo::getDatasetId, datasetId);
         dataInfoLambdaQueryWrapper.in(DataInfo::getName, names);
         dataInfoLambdaQueryWrapper.eq(DataInfo::getParentId, parentId);
+        dataInfoLambdaQueryWrapper.eq(DataInfo::getIsDeleted, false);
         return DefaultConverter.convert(dataInfoDAO.list(dataInfoLambdaQueryWrapper), DataInfoBO.class);
     }
 
