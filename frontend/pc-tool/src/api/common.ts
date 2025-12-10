@@ -109,15 +109,15 @@ export async function getDataClassificationBatch(dataIds: string[] | string) {
     const batchSize = 200;
     const requests: Promise<any>[] = [];
     while (dataIds.length > 0) {
-      const batchIds = dataIds.splice(0, batchSize);
-      requests.push(getDataClassification(batchIds));
+        const batchIds = dataIds.splice(0, batchSize);
+        requests.push(getDataClassification(batchIds));
     }
     return Promise.all(requests).then((res) => {
-      return res.reduce((map, item) => {
-        return Object.assign(map, item);
-      }, {});
+        return res.reduce((map, item) => {
+            return Object.assign(map, item);
+        }, {});
     });
-  }
+}
 export async function unlockRecord(recordId: string) {
     let url = `/api/data/unLock/${recordId}`;
     return await post(url);
@@ -285,7 +285,7 @@ export async function getResultSources(dataId: string) {
             });
         });
     });
-    return sources.filter((e) => e.sourceType !== SourceType.DATA_FLOW);
+    return sources;
 }
 export async function getFrameSeriesData(datasetId: string, frameSeriesId: string) {
     const url = `/api/data/getDataIdBySceneIds`;

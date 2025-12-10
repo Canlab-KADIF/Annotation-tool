@@ -31,6 +31,7 @@
             v-model:value="selectModelRunIds"
             :tree-data="props.modelRunResultList"
             tree-checkable
+            :show-checked-strategy="SHOW_CHILD"
             allow-clear
             placeholder="Please select"
             showSearch
@@ -78,6 +79,8 @@
   import { message, Select, TreeSelect } from 'ant-design-vue';
   import { BasicModal, useModalInner } from '/@/components/Modal';
   import { Icon } from '/@/components/Icon';
+
+  const SHOW_CHILD = TreeSelect.SHOW_CHILD;
 
   import { exportData } from '/@/api/business/dataset';
   import { downloadOriginalZip } from '/@/api/business/dataset';
@@ -252,7 +255,14 @@
         res.ids = [dataId].toString();
       }
     }
-    res.selectModelRunIds = selectModelRunIds.value.toString();
+    res.selectModelRunIds = selectModelRunIds.value
+      .map((id) => {
+        if (id === 'model--99') return -99;
+        if (id === 'model--1') return -1;
+        return id;
+      })
+      .filter((id) => !isNaN(Number(id)))
+      .toString();
     res.dataFormat = dataFormat.value;
     return res;
   };

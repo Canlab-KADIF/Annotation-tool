@@ -498,7 +498,7 @@
     modelRunResultList.value = res.map((item) => {
       let result = {
         label: item.modelName,
-        value: item.modelId,
+        value: 'model-' + item.modelId,
         children: item.runRecords.map((i) => ({
           label: i.runNo,
           value: i.id,

@@ -90,30 +90,26 @@
     );
 
     let filters = computed(() => {
-        let { FILTER_ALL, withoutTaskId } = state.config;
+        let { FILTER_ALL } = state.config;
         let sources = state.sources || [];
         let all: IFilter = { value: FILTER_ALL, label: $$('labelAll') };
-        let groundTruth: IFilter = { value: withoutTaskId, label: $$('labelGroundTruth') };
         // let model: IFilter = { label: $$('labelModelRuns'), options: [] };
 
-        let filters = [all, groundTruth] as IFilter[];
+        let filters = [all] as IFilter[];
         let modelMap = {};
         sources.forEach((s) => {
             let { sourceId, sourceType, modelId = '', modelName = '', name } = s;
-            if (sourceType === SourceType.TASK) {
-                (groundTruth.options as any).push({ value: sourceId, label: 'Task ' + s.name });
-            } else if (sourceType === SourceType.MODEL) {
-                let options = modelMap[modelId];
-                if (!options) {
-                    options = [];
-                    modelMap[modelId] = options;
-                    filters.push({
-                        options: options,
-                        label: modelName,
-                    });
-                }
-                options.push({ value: sourceId, label: name });
+            // Treat everything as a MODEL type for display purposes to group by modelName
+            let options = modelMap[modelId];
+            if (!options) {
+                options = [];
+                modelMap[modelId] = options;
+                filters.push({
+                    options: options,
+                    label: modelName,
+                });
             }
+            options.push({ value: sourceId, label: name });
         });
         return filters;
     });

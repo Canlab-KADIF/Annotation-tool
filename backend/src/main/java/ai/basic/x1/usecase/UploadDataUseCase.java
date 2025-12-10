@@ -784,6 +784,11 @@ public class UploadDataUseCase {
                         insertBO.setClassAttributes(JSONUtil.parseObj(object));
                         insertBO.setClassId(object.getClassId());
                         insertBO.setSourceType(sourceType); // sourceType 지정 (GT or ROS)
+                        if (DataAnnotationObjectSourceTypeEnum.ROS.equals(sourceType)) {
+                            insertBO.setSourceId(-99L);
+                        } else if (DataAnnotationObjectSourceTypeEnum.GT.equals(sourceType)) {
+                            insertBO.setSourceId(-1L);
+                        }
                         dataAnnotationObjectBOList.add(insertBO);
                     });
 

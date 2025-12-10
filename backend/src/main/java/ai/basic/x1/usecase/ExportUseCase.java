@@ -269,8 +269,13 @@ public class ExportUseCase {
                             dataExportBaseBO.getName());
                     // FileUtil.writeString(JSONUtil.toJsonStr(resultBO, jsonConfig), resultPath, StandardCharsets.UTF_8);
                     JSON json = JSONUtil.parse(resultBO, jsonConfig);
+                    File file = new File(resultPath);
+                    FileUtil.mkdir(file.getParentFile());
                     FileUtil.writeString(JSONUtil.toJsonPrettyStr(json), resultPath, StandardCharsets.UTF_8);
+                    log.info("Written result file to: {}", resultPath);
                 }
+            } else {
+                log.warn("No result found for data: {}", dataExportBaseBO.getName());
             }
             // else {
             //     // 결과가 없으면 빈 JSON 만들어주기

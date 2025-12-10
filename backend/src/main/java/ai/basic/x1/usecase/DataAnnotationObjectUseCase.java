@@ -168,23 +168,45 @@ public class DataAnnotationObjectUseCase {
         if (CollUtil.isEmpty(dataAnnotationObjectList)) {
             return List.of();
         }
-        var sourceIds = dataAnnotationObjectList.stream().map(DataAnnotationObject::getSourceId).collect(Collectors.toList());
-        var modelRunRecordList = modelRunRecordDAO.listByIds(sourceIds);
-        if (CollUtil.isEmpty(modelRunRecordList)) {
-            return List.of();
-        }
-        var modelRunMap = modelRunRecordList.stream().collect(Collectors.groupingBy(ModelRunRecord::getModelId));
-        var modelIds = modelRunRecordList.stream().map(ModelRunRecord::getModelId).collect(Collectors.toList());
-        var modelList = modelDAO.listByIds(modelIds);
-        var modelMap = modelList.stream().collect(Collectors.toMap(Model::getId, Model::getName));
         var modelResultBOList = new ArrayList<DataModelResultBO>();
-        modelRunMap.forEach((modelId, runRecordList) -> {
-            var runRecordBOList = runRecordList.stream().map(runRecord -> DefaultConverter.convert(runRecord, RunRecordBO.class)).collect(Collectors.toList());
-            var datasetModelResultBO = DataModelResultBO.builder().modelId(modelId)
-                    .modelName(modelMap.get(modelId)).runRecords(runRecordBOList).build();
-            modelResultBOList.add(datasetModelResultBO);
+        var sourceIds = dataAnnotationObjectList.stream().map(DataAnnotationObject::getSourceId).collect(Collectors.toList());
+        
+        // Check for GT (-1)
+        if (sourceIds.contains(-1L)) {
+            modelResultBOList.add(DataModelResultBO.builder()
+                    .modelId(-1L)
+                    .modelName("Ground Truth")
+                    .runRecords(List.of(RunRecordBO.builder().id(-1L).runNo("Ground Truth").build()))
+                    .build());
+            sourceIds.remove(-1L);
+        }
 
-        });
+        // Check for ROS (-99)
+        if (sourceIds.contains(-99L)) {
+            modelResultBOList.add(DataModelResultBO.builder()
+                    .modelId(-99L)
+                    .modelName("ROS")
+                    .runRecords(List.of(RunRecordBO.builder().id(-99L).runNo("ROS").build()))
+                    .build());
+            sourceIds.remove(-99L);
+        }
+
+        if (CollUtil.isNotEmpty(sourceIds)) {
+            var modelRunRecordList = modelRunRecordDAO.listByIds(sourceIds);
+            if (CollUtil.isNotEmpty(modelRunRecordList)) {
+                var modelRunMap = modelRunRecordList.stream().collect(Collectors.groupingBy(ModelRunRecord::getModelId));
+                var modelIds = modelRunRecordList.stream().map(ModelRunRecord::getModelId).collect(Collectors.toList());
+                var modelList = modelDAO.listByIds(modelIds);
+                var modelMap = modelList.stream().collect(Collectors.toMap(Model::getId, Model::getName));
+
+                modelRunMap.forEach((modelId, runRecordList) -> {
+                    var runRecordBOList = runRecordList.stream().map(runRecord -> DefaultConverter.convert(runRecord, RunRecordBO.class)).collect(Collectors.toList());
+                    var datasetModelResultBO = DataModelResultBO.builder().modelId(modelId)
+                            .modelName(modelMap.get(modelId)).runRecords(runRecordBOList).build();
+                    modelResultBOList.add(datasetModelResultBO);
+                });
+            }
+        }
         return modelResultBOList;
     }
 

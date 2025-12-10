@@ -173,10 +173,10 @@ public class ModelRunRecordUseCase {
         }
 
         // Check for ROS
-        long rosCount = dataAnnotationObjectDAO.countByDatasetIdAndSourceId(datasetId, 99L);
+        long rosCount = dataAnnotationObjectDAO.countByDatasetIdAndSourceId(datasetId, -99L);
         if (rosCount > 0) {
             modelResultBOList.add(DatasetModelResultBO.builder()
-                    .modelId(99L)
+                    .modelId(-99L)
                     .modelName("ROS")
                     .runRecords(List.of())
                     .build());

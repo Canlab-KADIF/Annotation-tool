@@ -655,6 +655,9 @@ public class DataInfoUseCase {
             if (dataInfoQueryBO.getSelectModelRunIds().contains(GROUND_TRUTH)) {
                 resultMap.put(GROUND_TRUTH, GROUND_TRUTH_NAME);
             }
+            if (dataInfoQueryBO.getSelectModelRunIds().contains(-99L)) {
+                resultMap.put(-99L, "ROS");
+            }
         }
         dataInfoQueryBO.setIsAllResult(false);
         dataInfoQueryBO.setDataFormat(IMAGE.equals(dataInfoQueryBO.getDatasetType()) ? dataInfoQueryBO.getDataFormat() : DataFormatEnum.XTREME1);
@@ -1039,10 +1042,11 @@ public class DataInfoUseCase {
             
             var annotationList = dataAnnotationMap.get(dataId);
             var objectList = dataAnnotationObjectMap.get(dataId);
+            log.info("processData: dataId={}, objectList size={}", dataId, objectList != null ? objectList.size() : 0);
             var dataResultExportBOList = new ArrayList<DataResultExportBO>();
             if (CollectionUtil.isNotEmpty(objectList)) {
-                var objectBySourceType = objectList.stream().collect(Collectors.groupingBy(DataAnnotationObjectBO::getSourceType));
-                objectBySourceType.forEach((sourceType, objectSourceList) -> {
+                var objectBySourceId = objectList.stream().collect(Collectors.groupingBy(DataAnnotationObjectBO::getSourceId));
+                objectBySourceId.forEach((sourceId, objectSourceList) -> {
                     var dataResultExportBO = DataResultExportBO.builder().dataId(dataId).version(version).build();
                     var objects = new ArrayList<DataResultObjectExportBO>();
                     objectSourceList.forEach(o -> {
@@ -1103,8 +1107,18 @@ public class DataInfoUseCase {
                         objects.add(dataResultObjectExportBO);
                     });
                     dataResultExportBO.setObjects(objects);
-                    // dataResultExportBO.setSourceName(resultMap.get(sourceType));
-                    dataResultExportBO.setSourceName(sourceType.name());
+                    
+                    var sourceType = objectSourceList.get(0).getSourceType();
+                    var runName = resultMap.get(sourceId);
+                    if (runName == null) {
+                        runName = sourceType.name();
+                    }
+
+                    if (DataAnnotationObjectSourceTypeEnum.MODEL.equals(sourceType)) {
+                        dataResultExportBO.setSourceName("MODEL/" + runName);
+                    } else {
+                        dataResultExportBO.setSourceName(runName);
+                    }
 
                     // if (GROUND_TRUTH.equals(sourceType)) {
                     //     if (CollectionUtil.isNotEmpty(annotationList)) {
@@ -1322,6 +1336,7 @@ public class DataInfoUseCase {
             resultMap.putAll(modelRunRecordBOList.stream().collect(Collectors.toMap(ModelRunRecordBO::getId, ModelRunRecordBO::getRunNo)));
         }
         resultMap.put(GROUND_TRUTH, GROUND_TRUTH_NAME);
+        resultMap.put(-99L, "ROS");
         return resultMap;
     }
 
