@@ -1029,7 +1029,14 @@ public class DataInfoUseCase {
         this.addSceneInfo(dataList);
         dataList.forEach(dataInfoBO -> {
             var dataId = dataInfoBO.getId();
-            var dataExportBaseBO = assembleExportDataContent(dataInfoBO, queryBO.getDatasetType());
+            // var dataExportBaseBO = assembleExportDataContent(dataInfoBO, queryBO.getDatasetType());
+            // For result export, we only need basic info, not file URLs
+            var dataExportBaseBO = new DataExportBaseBO();
+            dataExportBaseBO.setDataId(dataId);
+            dataExportBaseBO.setName(dataInfoBO.getName());
+            dataExportBaseBO.setType(queryBO.getDatasetType().name());
+            dataExportBaseBO.setVersion(version);
+            
             var annotationList = dataAnnotationMap.get(dataId);
             var objectList = dataAnnotationObjectMap.get(dataId);
             var dataResultExportBOList = new ArrayList<DataResultExportBO>();
