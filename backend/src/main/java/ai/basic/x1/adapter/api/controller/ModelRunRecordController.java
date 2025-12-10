@@ -57,9 +57,9 @@ public class ModelRunRecordController {
         modelRunRecordUseCase.deleteById(id);
     }
 
-    @GetMapping("getDatasetModelRunResult/{datasetId}")
-    public List<DatasetModelResultDTO> getDatasetModelRunResult(@PathVariable Long datasetId) {
-        var datasetModelResultBOList = modelRunRecordUseCase.getDatasetModelRunResult(datasetId);
+    @GetMapping("getDatasetResultSources/{datasetId}")
+    public List<DatasetModelResultDTO> getDatasetResultSources(@PathVariable Long datasetId) {
+        var datasetModelResultBOList = modelRunRecordUseCase.getDatasetResultSources(datasetId);
         return DefaultConverter.convert(datasetModelResultBOList, DatasetModelResultDTO.class);
     }
 

@@ -79,7 +79,7 @@
           @fetchList="fixedFetchList"
           @handleSplite="handleSplite"
           v-model:name="name"
-          @resetMoelResult="getMoelResult"
+          @resetMoelResult="getDatasetResultSources"
         >
           <template #scene>
             <div key="scene" class="tool-info" v-if="type === PageTypeEnum.frame">
@@ -335,7 +335,7 @@
     datasetObjectApi,
     deleteBatchDataset,
     getLockedByDataset,
-    getMoelResultApi,
+    getDatasetResultSourcesApi,
     getStatusNum,
     hasOntologyApi,
     makeFrameSeriesApi,
@@ -430,7 +430,7 @@
   const annotationStatus = ref<any>();
   let modelRunResultList = ref<any>([]);
   const modelRunResultListForDisplay = computed(() => {
-    let result: Array<any> = [{ label: 'Ground Truths', value: -1 }, ...modelRunResultList.value];
+    let result: Array<any> = [...modelRunResultList.value];
     return result;
   });
 
@@ -491,8 +491,9 @@
   });
   let timeout;
 
-  let getMoelResult = async () => {
-    let res = await getMoelResultApi(id as any);
+  let getDatasetResultSources = async () => {
+    console.log("getDatasetResultSources func called");
+    let res = await getDatasetResultSourcesApi(id as any);
 
     modelRunResultList.value = res.map((item) => {
       let result = {
@@ -534,7 +535,7 @@
     });
 
     setTimeout(() => {
-      getMoelResult();
+      getDatasetResultSources();
     }, 200);
   });
 

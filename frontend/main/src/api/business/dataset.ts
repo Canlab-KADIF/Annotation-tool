@@ -445,9 +445,9 @@ export const splitDataSelected = (params: SelectedDataPa) =>
     },
   });
 
-export const getMoelResultApi = (datasetId: number) =>
+export const getDatasetResultSourcesApi = (datasetId: number) =>
   defHttp.get<any>({
-    url: `${Api.MODEL_RUN}/getDatasetModelRunResult/${datasetId}`,
+    url: `${Api.MODEL_RUN}/getDatasetResultSources/${datasetId}`,
 
     headers: {
       // @ts-ignore

@@ -65,6 +65,9 @@ public class ModelRunRecordUseCase {
     @Autowired
     private ModelUseCase modelUseCase;
 
+    @Autowired
+    private ai.basic.x1.adapter.port.dao.DataAnnotationObjectDAO dataAnnotationObjectDAO;
+
     public List<ModelRunRecordBO> findAllModelRunRecord(ModelRunRecordBO bo) {
         LambdaQueryWrapper<ModelRunRecord> modelRunRecordLambdaQueryWrapper = Wrappers.lambdaQuery();
         modelRunRecordLambdaQueryWrapper.eq(ObjectUtil.isNotNull(bo.getModelId()), ModelRunRecord::getModelId, bo.getModelId());
@@ -156,23 +159,42 @@ public class ModelRunRecordUseCase {
         return DefaultConverter.convert(modelRunRecordList,ModelRunRecordBO.class);
     }
 
-    public List<DatasetModelResultBO> getDatasetModelRunResult(Long datasetId) {
-       var modelRunRecordBOList = this.findByDatasetId(datasetId);
-        if (CollUtil.isEmpty(modelRunRecordBOList)) {
-            return List.of();
-        }
+    public List<DatasetModelResultBO> getDatasetResultSources(Long datasetId) {
         var modelResultBOList = new ArrayList<DatasetModelResultBO>();
-        var modelIds = modelRunRecordBOList.stream().map(ModelRunRecordBO::getModelId).collect(Collectors.toSet());
-        var modelList = modelDAO.listByIds(modelIds);
-        var modelMap = modelList.stream().collect(Collectors.toMap(Model::getId, Model::getName));
-        var modelRunMap = modelRunRecordBOList.stream().collect(Collectors.groupingBy(ModelRunRecordBO::getModelId));
-        modelRunMap.forEach((modelId, runRecordList) -> {
-            var runRecordBOList = runRecordList.stream().map(runRecord -> DefaultConverter.convert(runRecord, RunRecordBO.class)).collect(Collectors.toList());
-            var datasetModelResultBO = DatasetModelResultBO.builder().modelId(modelId)
-                    .modelName(modelMap.get(modelId)).runRecords(runRecordBOList).build();
-            modelResultBOList.add(datasetModelResultBO);
+        
+        // Check for Ground Truths
+        long gtCount = dataAnnotationObjectDAO.countGTByDatasetId(datasetId);
+        if (gtCount > 0) {
+            modelResultBOList.add(DatasetModelResultBO.builder()
+                    .modelId(-1L)
+                    .modelName("GT")
+                    .runRecords(List.of())
+                    .build());
+        }
 
-        });
+        // Check for ROS
+        long rosCount = dataAnnotationObjectDAO.countByDatasetIdAndSourceId(datasetId, 99L);
+        if (rosCount > 0) {
+            modelResultBOList.add(DatasetModelResultBO.builder()
+                    .modelId(99L)
+                    .modelName("ROS")
+                    .runRecords(List.of())
+                    .build());
+        }
+
+        var modelRunRecordBOList = this.findByDatasetId(datasetId);
+        if (CollUtil.isNotEmpty(modelRunRecordBOList)) {
+            var modelIds = modelRunRecordBOList.stream().map(ModelRunRecordBO::getModelId).collect(Collectors.toSet());
+            var modelList = modelDAO.listByIds(modelIds);
+            var modelMap = modelList.stream().collect(Collectors.toMap(Model::getId, Model::getName));
+            var modelRunMap = modelRunRecordBOList.stream().collect(Collectors.groupingBy(ModelRunRecordBO::getModelId));
+            modelRunMap.forEach((modelId, runRecordList) -> {
+                var runRecordBOList = runRecordList.stream().map(runRecord -> DefaultConverter.convert(runRecord, RunRecordBO.class)).collect(Collectors.toList());
+                var datasetModelResultBO = DatasetModelResultBO.builder().modelId(modelId)
+                        .modelName(modelMap.get(modelId)).runRecords(runRecordBOList).build();
+                modelResultBOList.add(datasetModelResultBO);
+            });
+        }
         return modelResultBOList;
     }
 
