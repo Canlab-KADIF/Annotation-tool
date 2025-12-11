@@ -78,6 +78,7 @@ export default {
     success: 'Success',
     failure: 'Failure',
     running: 'Running',
+    saving: 'Saving',
     successWithError: 'Success with Error',
   },
   all: 'All',

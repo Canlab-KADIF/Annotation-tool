@@ -39,6 +39,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
+import ai.basic.x1.entity.enums.DataAnnotationObjectSourceTypeEnum;
 
 import javax.annotation.PostConstruct;
 import java.io.File;
@@ -105,6 +106,14 @@ public abstract class AbstractModelMessageHandler<T> {
     public abstract ModelTaskInfoBO modelRun(ModelMessageBO modelMessageBO);
 
     /**
+     * model batch run implement by subClass
+     *
+     * @param modelMessageBO
+     * @return
+     */
+    public abstract List<ModelTaskInfoBO> modelRunBatch(List<ModelMessageBO> modelMessageBOList);
+
+    /**
      * call remote model service implement by subClass
      *
      * @param modelMessageBO
@@ -156,6 +165,49 @@ public abstract class AbstractModelMessageHandler<T> {
         } catch (Exception e) {
             log.error("{} handleDataModelRun exception: {}", getModelCodeEnum(), e);
             return false;
+        }
+    }
+
+    public boolean handleDatasetModelRunBatch(List<ModelMessageBO> modelMessageBOList) {
+        try {
+            if (isNotExistModelRunRecord(modelMessageBOList.get(0))) {
+                return true;
+            }
+            updateModelRunRecordStatus(modelMessageBOList.get(0), RunStatusEnum.RUNNING, null, null);
+            var modelResults = modelRunBatch(modelMessageBOList); // List<ModelTaskInfoBO>
+            // log.info("modelResults size: {}", modelResults.size());
+            // log.info("modelResults: {}", JSONUtil.toJsonStr(modelResults));
+            for (int i = 0; i < modelResults.size(); i++) {
+                
+                ModelTaskInfoBO modelResult = modelResults.get(i);
+                ModelMessageBO modelMessageBO = modelMessageBOList.get(i);
+                // log.info("i th processing: {}", i);
+                // log.info("modelResult: {}", JSONUtil.toJsonStr(modelResult));
+                // log.info("model Message BO name: {}", modelMessageBO.getDataInfo().getName());
+                // log.info("model Message BO id: {}", modelMessageBO.getDataInfo().getId());
+                // log.info("==============================================");
+                if (UsecaseCode.OK.getCode().equals(modelResult.getCode())) {
+                    // log.info("modelResult is OK, syncModelAnnotationResult");
+                    syncModelAnnotationResult(modelResult, modelMessageBO);
+                }
+                else{
+                    log.warn("modelResult is not OK, skip syncModelAnnotationResult, modelResult: {}", JSONUtil.toJsonStr(modelResult));
+                }
+                if (saveToModelDatasetResult(modelMessageBO, modelResult)) {
+                    // log.info("saveToModelDatasetResult is OK, updateProgress");
+                    updateProgress(modelMessageBO);
+                } else {
+                    log.warn("update model_dataset_result fail! modelMessageBO is {} ",
+                            JSONUtil.toJsonStr(modelMessageBO));
+                    updateModelRunRecordStatus(modelMessageBO, RunStatusEnum.FAILURE, "DB save failed", null);
+                }
+            }
+            return true;
+        } catch (Exception e) {
+            log.error("{} handleDatasetModelRunBatch exception 발생", getModelCodeEnum());
+            updateModelRunRecordStatus(modelMessageBOList.get(0), RunStatusEnum.FAILURE, "MODEL run failed", null);
+            log.info("=============== failure updatate complete ===============");
+            throw e;
         }
     }
 
@@ -233,7 +285,7 @@ public abstract class AbstractModelMessageHandler<T> {
     }
 
     private void modelRunRecordStart(ModelMessageBO modelMessage) {
-        updateModelRunRecordStatus(modelMessage, RunStatusEnum.RUNNING, null, null);
+        updateModelRunRecordStatus(modelMessage, RunStatusEnum.SAVING, null, null);
     }
 
     private void updateModelRunRecordStatus(ModelMessageBO modelMessage, RunStatusEnum runStatus,
@@ -246,6 +298,7 @@ public abstract class AbstractModelMessageHandler<T> {
                 .set(ModelRunRecord::getUpdatedBy, modelMessage.getCreatedBy())
                 .eq(ModelRunRecord::getModelSerialNo, modelMessage.getModelSerialNo());
         if (isUpdateErrorMsg) {
+            log.info("errorMsg: {}", errorMsg);
             wrapper.set(ModelRunRecord::getErrorReason, errorMsg);
         }
         modelRunRecordDAO.update(wrapper);
@@ -265,14 +318,15 @@ public abstract class AbstractModelMessageHandler<T> {
         var groundTruthFilePath = String.format("%s%s/groundTruth.json", tempPath, uuid);
         var modelRunFilePath = String.format("%s%s/modelRun.json", tempPath, uuid);
         if (CollUtil.isNotEmpty(modelDatasetResultList)) {
-            var modelDatasetResultSplitList = ListUtil.split(modelDatasetResultList, 100);
+            var modelDatasetResultSplitList = ListUtil.split(modelDatasetResultList, 1000);
             modelDatasetResultSplitList.forEach(subModelDatasetResultList -> {
                 var dataIds = subModelDatasetResultList.stream().map(ModelDatasetResult::getDataId).collect(Collectors.toList());
                 var ids = subModelDatasetResultList.stream().map(ModelDatasetResult::getId).collect(Collectors.toList());
                 var modelDatasetResults = modelDatasetResultDAO.listByIds(ids);
                 var annotationObjectLambdaQueryWrapper = Wrappers.lambdaQuery(DataAnnotationObject.class);
                 annotationObjectLambdaQueryWrapper.in(DataAnnotationObject::getDataId, dataIds);
-                annotationObjectLambdaQueryWrapper.eq(DataAnnotationObject::getSourceId, -1L);
+                // annotationObjectLambdaQueryWrapper.eq(DataAnnotationObject::getSourceId, -1L);
+                annotationObjectLambdaQueryWrapper.eq(DataAnnotationObject::getSourceType, DataAnnotationObjectSourceTypeEnum.GT);
                 var dataAnnotationObjectList = dataAnnotationObjectDAO.list(annotationObjectLambdaQueryWrapper);
                 assembleCalculateMetricsData(modelDatasetResults, dataAnnotationObjectList, groundTruthFilePath, modelRunFilePath);
             });

@@ -12,5 +12,9 @@ public enum DataFormatEnum {
     /**
      * COCO
      */
-    COCO
+    COCO,
+    /**
+     * ORIGINAL_ZIP
+     */
+    ORIGINAL_ZIP
 }

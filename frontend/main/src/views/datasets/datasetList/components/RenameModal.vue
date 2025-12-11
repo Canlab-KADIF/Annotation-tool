@@ -47,7 +47,7 @@
   const rules = {
     name: [
       { required: true, message: 'Please input name', trigger: 'blur' },
-      { max: 20, message: 'Please enter less than 20' },
+      { max: 30, message: 'Please enter less than 30' },
     ],
   };
 

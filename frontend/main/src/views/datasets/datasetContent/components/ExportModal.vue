@@ -39,11 +39,22 @@
         </div>
         <div class="flex items-center gap-10px">
           <div class="whitespace-nowrap" style="color: #333; width: 100px">Export Format</div>
-          <Select v-model:value="dataFormat" style="width: 300px" allowClear>
+          <TreeSelect
+            :dropdownStyle="{ width: '200px' }"
+            style="width: 300px"
+            v-model:value="dataFormat"
+            :tree-data="dataFormatTreeData"
+            allow-clear
+            placeholder="Please select"
+            showSearch
+            treeDefaultExpandAll
+          />
+
+          <!-- <Select v-model:value="dataFormat" style="width: 300px" allowClear>
             <Select.Option v-for="item in dataFormatOption" :key="item.value" :value="item.value">
               {{ item.label }}
             </Select.Option>
-          </Select>
+          </Select> -->
         </div>
         <div class="flex items-center gap-8px">
           <Icon icon="eva:info-fill" size="20" color="#57CCEF" />
@@ -69,6 +80,7 @@
   import { Icon } from '/@/components/Icon';
 
   import { exportData } from '/@/api/business/dataset';
+  import { downloadOriginalZip } from '/@/api/business/dataset';
   import { dataTypeEnum } from '/@/api/business/model/datasetModel';
 
   const { query } = useRoute();
@@ -85,27 +97,40 @@
   }>();
   const emit = defineEmits(['setExportRecord']);
 
-  const dataFormat = ref<string>('XTREME1');
+  const dataFormat = ref<string>('ORIGINAL_ZIP');
 
   let dataFormatOption = computed(() => {
-    return props.datasetType?.includes('LIDAR') || props.datasetType?.includes('TEXT')
-      ? [
-          {
-            value: 'XTREME1',
-            label: 'Xtreme1',
-          },
-        ]
-      : [
-          {
-            value: 'XTREME1',
-            label: 'Xtreme1',
-          },
-          {
-            value: 'COCO',
-            label: 'COCO',
-          },
-        ];
+    const originalZipOption = {
+      value: 'ORIGINAL_ZIP',
+      label: 'Original ZIP',
+    };
+
+    const xtreme1Options = [
+      {
+        value: 'XTREME1',
+        label: 'Xtreme1',
+      },
+    ];
+    const cocoOption = {
+      value: 'COCO',
+      label: 'COCO',
+    };
+
+    if (props.datasetType?.includes('LIDAR') || props.datasetType?.includes('TEXT')) {
+      return [ originalZipOption ];
+    } else {
+      return [ originalZipOption, cocoOption];
+    }
   });
+
+  const dataFormatTreeData = computed(() => {
+  return dataFormatOption.value.map(item => ({
+    title: item.label,
+    key: item.value,
+    value: item.value,
+    children: [],  // 자식 없으면 빈 배열
+  }));
+});
 
   enum dataOptionEmu {
     ALL = '',
@@ -164,23 +189,52 @@
       data.maxDataConfidence = data.confidenceSlider[1];
     }
     delete data.confidenceSlider;
-    try {
-      isLoading.value = true;
-      const res = await exportData(fliterPa(data));
-      message.success({
-        content: 'successed',
-        duration: 5,
-      });
-      emit('setExportRecord', res);
-      closeModal();
-    } catch (e) {}
+    console.log("handleSubmit 함수 실행됨"); 
+    console.log("dataFormat.value: ", dataFormat.value);
+    console.log("selectModelRunIds.value.toString(): ", selectModelRunIds.value.toString());
+    console.log("selectModelRunIds.value?.length: ", selectModelRunIds.value?.length);
+    if (dataFormat.value === 'ORIGINAL_ZIP') {
+      try {
+        isLoading.value = true;
+        console.log("downloadOriginalZip api 호출"); 
+        const presignedUrls = await downloadOriginalZip(id as string); // 리스트 반환
+        console.log('presignedUrls:', presignedUrls);
 
+        if (Array.isArray(presignedUrls) && presignedUrls.length > 0) {
+          presignedUrls.forEach((url) => {
+            console.log("url: ", url);
+            window.open(url, '_blank');
+          });
+          message.success('원본 ZIP 다운로드가 시작되었습니다');
+        } else {
+          message.warning('다운로드할 ZIP 파일이 없습니다');
+        }
+
+        closeModal();
+      } catch (e) {
+        message.error('원본 ZIP 다운로드 실패');
+      } finally {
+        isLoading.value = false;
+      }
+    }
+    if (selectModelRunIds.value?.length){
+      try {
+        isLoading.value = true;
+        const res = await exportData(fliterPa(data));
+        message.success({
+          content: 'export data successed',
+          duration: 5,
+        });
+        emit('setExportRecord', res);
+        closeModal();
+      } catch (e) {}
+    }
     setTimeout(() => {
       isLoading.value = false;
     }, 300);
   };
   let handleReset = () => {
-    dataFormat.value = 'XTREME1';
+    dataFormat.value = 'ORIGINAL_ZIP';
     dataType.value = '';
     selectModelRunIds.value = [];
   };

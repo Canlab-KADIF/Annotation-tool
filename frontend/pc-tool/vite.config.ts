@@ -13,8 +13,8 @@ const config = defineConfig({
         proxy: {
             '/api': {
                 changeOrigin: true,
-                // target: 'http://localhost:8190',
-                target: "http://11.11.50.39:8190",
+                target: 'http://localhost:8190',
+                // target: "http://11.11.50.39:8190",
             },
         },
     },

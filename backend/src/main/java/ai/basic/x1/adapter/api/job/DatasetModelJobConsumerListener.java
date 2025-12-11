@@ -13,6 +13,7 @@ import org.springframework.data.redis.stream.StreamListener;
 
 import java.util.concurrent.ConcurrentHashMap;
 
+import java.util.List;
 /**
  * @author andy
  */
@@ -36,12 +37,40 @@ public class DatasetModelJobConsumerListener implements StreamListener<String, O
 
     @Override
     public void onMessage(ObjectRecord message) {
-        String modelMessageBOJSONStr = (String) message.getValue();
-        log.info("receive message:{}", modelMessageBOJSONStr);
-        ModelMessageBO modelMessageBO = JSONUtil.toBean(modelMessageBOJSONStr, ModelMessageBO.class);
-        buildRequestContext(modelMessageBO.getCreatedBy());
-        if (modelMessageHandlerMap.get(modelMessageBO.getModelCode().name()).handleDatasetModelRun(modelMessageBO)) {
-            redisTemplate.opsForStream().acknowledge(streamKey, group, message.getId());
+        String jsonStr = (String) message.getValue();
+        try {
+            if (jsonStr.trim().startsWith("[")) {
+                // JSON 배열 → List<ModelMessageBO>
+                List<ModelMessageBO> modelMessageList = JSONUtil.toList(jsonStr, ModelMessageBO.class);
+                // log.info("modelMessageList : {}", modelMessageList);
+                // log.info("modelMessageList size: {}", modelMessageList.size());
+    
+                if (!modelMessageList.isEmpty()) {
+                    // User context는 첫 번째 메시지 기준으로 세팅
+                    buildRequestContext(modelMessageList.get(0).getCreatedBy());
+    
+                    // 배치 전체를 handler로 넘김
+                    AbstractModelMessageHandler handler =
+                            modelMessageHandlerMap.get(modelMessageList.get(0).getModelCode().name());
+    
+                    if (handler != null && handler.handleDatasetModelRunBatch(modelMessageList)) {
+                        redisTemplate.opsForStream().acknowledge(streamKey, group, message.getId());
+                    }
+                }
+    
+            } else {
+                // 단일 메시지 처리 (기존 로직)
+                ModelMessageBO modelMessageBO = JSONUtil.toBean(jsonStr, ModelMessageBO.class);
+                buildRequestContext(modelMessageBO.getCreatedBy());
+                AbstractModelMessageHandler handler =
+                        modelMessageHandlerMap.get(modelMessageBO.getModelCode().name());
+                if (handler != null && handler.handleDatasetModelRun(modelMessageBO)) {
+                    redisTemplate.opsForStream().acknowledge(streamKey, group, message.getId());
+                }
+            }
+    
+        } catch (Exception e) {
+            log.error("메시지 처리 중 오류", e);
         }
     }
 

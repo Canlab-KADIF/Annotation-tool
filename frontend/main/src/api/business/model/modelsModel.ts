@@ -43,6 +43,7 @@ export enum statusEnum {
   running = 'RUNNING',
   success = 'SUCCESS',
   failure = 'FAILURE',
+  saving = 'SAVING',
   SUCCESS_WITH_ERROR = 'SUCCESS_WITH_ERROR',
 }
 /** run table ite, */

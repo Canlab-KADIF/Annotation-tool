@@ -34,4 +34,8 @@ public class ApiResult<T> {
     public static ApiResult<?> success() {
         return new ApiResult<>();
     }
+
+    public static <T> ApiResult<T> success(T data) {
+        return new ApiResult<>(data);
+    }
 }

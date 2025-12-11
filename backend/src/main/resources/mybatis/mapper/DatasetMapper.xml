@@ -53,7 +53,7 @@
         where d.dataset_id = #{datasetId} and d.is_deleted = FALSE
     </select>
 
-    <delete id="deleteById">
+    <!-- <delete id="deleteById">
         update dataset set del_unique_key = id, is_deleted = true where id = #{id}
-    </delete>
+    </delete> -->
 </mapper>

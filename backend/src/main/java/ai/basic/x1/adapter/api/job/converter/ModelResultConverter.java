@@ -4,7 +4,9 @@ package ai.basic.x1.adapter.api.job.converter;
 import ai.basic.x1.adapter.dto.ApiResult;
 import ai.basic.x1.adapter.port.dao.mybatis.model.ModelClass;
 import ai.basic.x1.adapter.port.rpc.dto.PointCloudDetectionObject;
+import ai.basic.x1.adapter.port.rpc.dto.PointCloudDetectionExtendedObject;
 import ai.basic.x1.adapter.port.rpc.dto.PointCloudDetectionRespDTO;
+import ai.basic.x1.adapter.port.rpc.dto.PointCloudDetectionExtendedRespDTO;
 import ai.basic.x1.entity.ObjectBO;
 import ai.basic.x1.entity.PointBO;
 import ai.basic.x1.entity.PointCloudDetectionObjectBO;
@@ -21,10 +23,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * @author andy
  */
 public class ModelResultConverter {
+    private static final Logger log = LoggerFactory.getLogger(ModelResultConverter.class);
 
     public static PointCloudDetectionObjectBO preModelResultConverter(ApiResult<List<PointCloudDetectionRespDTO>> preModelRespDTOApiResult,
                                                                       PointCloudDetectionParamBO preModelParamBO, Map<String, ModelClass> modelClassMap) {
@@ -52,7 +58,160 @@ public class ModelResultConverter {
 
         return builder.build();
     }
+    public static List<PointCloudDetectionObjectBO> preModelBatchResultConverter(ApiResult<List<PointCloudDetectionExtendedRespDTO>> preModelRespDTOApiResult,
+                                                                                PointCloudDetectionParamBO preModelParamBO,
+                                                                                Map<String, ModelClass> modelClassMap) {
+        
+        // log.info("preModelBatchResultConverter input preModelRespDTOApiResult: {}", preModelRespDTOApiResult);
+        List<PointCloudDetectionObjectBO> resultList = new ArrayList<>();
+        if (preModelRespDTOApiResult.getCode() != UsecaseCode.OK || CollUtil.isEmpty(preModelRespDTOApiResult.getData())) {
+            log.info("preModelBatchResultConverter no data or error code");
+            return resultList;
+        }
 
+        for (PointCloudDetectionExtendedRespDTO extendedRespDTO : preModelRespDTOApiResult.getData()) {
+            PointCloudDetectionObjectBO.PointCloudDetectionObjectBOBuilder<?, ?> builder = PointCloudDetectionObjectBO.builder();
+            builder.dataId(extendedRespDTO.getId())
+                .message(extendedRespDTO.getMessage())
+                .code(extendedRespDTO.getCode());
+
+            if (UsecaseCode.OK.getCode().equals(extendedRespDTO.getCode()) && CollUtil.isNotEmpty(extendedRespDTO.getObjects())) {
+                // log.info("extendedRespDTO.getObjects(): {}", extendedRespDTO.getObjects());
+                var objects = toExtendedObjectBOs(extendedRespDTO.getObjects(), preModelParamBO, modelClassMap);
+                // log.info("objects after toExtendedObjectBOs: {}", objects);
+                builder.objects(objects);
+                if (CollUtil.isNotEmpty(objects)) {
+                    var dataConfidence = objects.stream().mapToDouble(object -> object.getConfidence().doubleValue()).summaryStatistics();
+                    builder.confidence(BigDecimal.valueOf(dataConfidence.getAverage()));
+                }
+            }
+
+            resultList.add(builder.build());
+        }
+        // log.info("preModelBatchResultConverter resultList: {}", resultList);
+        return resultList;
+    }
+
+    public static List<ObjectBO> toExtendedObjectBOs(
+            List<PointCloudDetectionExtendedObject> extendedObjects,
+            PointCloudDetectionParamBO preModelParamBO,
+            Map<String, ModelClass> modelClassMap) {
+
+        List<ObjectBO> list = new ArrayList<>(CollUtil.isNotEmpty(extendedObjects) ? extendedObjects.size() : 0);
+        for (PointCloudDetectionExtendedObject extendedObject : extendedObjects) {
+            ObjectBO objectBO = buildExtendedObjectBO(extendedObject, preModelParamBO, modelClassMap);
+            if (ObjectUtil.isNotNull(objectBO)) {
+                list.add(objectBO);
+            }
+        }
+        return list;
+    }
+
+    private static ObjectBO buildExtendedObjectBO(
+            PointCloudDetectionExtendedObject extendedObject,
+            PointCloudDetectionParamBO preModelParamBO,
+            Map<String, ModelClass> modelClassMap) {
+
+        if (extendedObject.getContour() == null) {
+            return null;
+        }
+
+        // GT_ 접두사 제거
+        String rawModelClass = extendedObject.getModelClass();
+        String modelClassKey = null;
+
+        if (rawModelClass != null) {
+            switch (rawModelClass) {
+                case "GT_CAR":
+                    modelClassKey = "Car";
+                    break;
+                case "GT_PED":
+                    modelClassKey = "Pedestrian";
+                    break;
+                default:
+                    modelClassKey = rawModelClass.replaceFirst("^GT_", "");
+                    break;
+            }
+        }
+
+        String modelClassName = null;
+        if (StrUtil.isNotEmpty(modelClassKey)) {
+            // ModelClass mc = modelClassMap.get(modelClassKey.trim());
+            ModelClass mc = modelClassMap.get(modelClassKey.trim().toUpperCase());
+            if (mc != null) {
+                modelClassName = mc.getName();
+                // log.info("raw model class: {}, Mapping model class key: {}, found ModelClass: {}", rawModelClass, modelClassKey, modelClassName);
+            }
+        }
+
+        ObjectBO objectBO = ObjectBO.builder()
+                .confidence(extendedObject.getModelConfidence())
+                .type("3D_BOX")
+                .id(extendedObject.getId())
+                .trackId(extendedObject.getTrackId())
+                .trackName(extendedObject.getTrackName())
+                .pointN(extendedObject.getContour().getPointN())
+                .modelClass(modelClassName)
+                .className(StrUtil.isNotBlank(modelClassName) ? modelClassName : "UNKNOWN")
+                .center3D(buildCenter3D(extendedObject))
+                .rotation3D(buildRotation3D(extendedObject))
+                .size3D(buildSize3D(extendedObject))
+                .classId(extendedObject.getClassId())
+                .build();
+
+        if (ObjectUtil.isNull(preModelParamBO) || matchExtendedResult(extendedObject, preModelParamBO)) {
+            return objectBO;
+        }
+
+        return null;
+    }
+
+    private static boolean matchExtendedResult(PointCloudDetectionExtendedObject extendedObject, PointCloudDetectionParamBO preModelParamBO) {
+        var selectedClasses = new HashSet<>(preModelParamBO.getClasses());
+        var selectedUpperClasses = selectedClasses.stream().map(String::toUpperCase).collect(Collectors.toList());
+
+        // boolean matchClassResult = ((CollUtil.isNotEmpty(selectedUpperClasses)
+        //         && selectedUpperClasses.contains(extendedObject.getModelClass().toUpperCase()))
+        //         || CollUtil.isEmpty(selectedUpperClasses));
+
+        boolean matchMinConfidence = ((ObjectUtil.isNotNull(preModelParamBO.getMinConfidence())
+                && preModelParamBO.getMinConfidence().compareTo(extendedObject.getModelConfidence()) <= 0)
+                || ObjectUtil.isNull(preModelParamBO.getMinConfidence()));
+
+        boolean matchMaxConfidence = ((ObjectUtil.isNotNull(preModelParamBO.getMaxConfidence())
+                && preModelParamBO.getMaxConfidence().compareTo(extendedObject.getModelConfidence()) >= 0)
+                || ObjectUtil.isNull(preModelParamBO.getMaxConfidence()));
+
+        // return matchClassResult && matchMinConfidence && matchMaxConfidence;
+        return matchMinConfidence && matchMaxConfidence;
+    }
+
+    private static PointBO buildCenter3D(PointCloudDetectionExtendedObject extendedObject) {
+        var center = extendedObject.getContour().getCenter3D();
+        return PointBO.builder()
+                .x(center.getX())
+                .y(center.getY())
+                .z(center.getZ())
+                .build();
+    }
+
+    private static PointBO buildRotation3D(PointCloudDetectionExtendedObject extendedObject) {
+        var rotation = extendedObject.getContour().getRotation3D();
+        return PointBO.builder()
+                .x(rotation.getX())
+                .y(rotation.getY())
+                .z(rotation.getZ())
+                .build();
+    }
+
+    private static PointBO buildSize3D(PointCloudDetectionExtendedObject extendedObject) {
+        var size = extendedObject.getContour().getSize3D();
+        return PointBO.builder()
+                .x(size.getX())
+                .y(size.getY())
+                .z(size.getZ())
+                .build();
+    }
     public static List<ObjectBO> toObjectBOs(List<PointCloudDetectionObject> labelInfos, PointCloudDetectionParamBO preModelParamBO, Map<String, ModelClass> modelClassMap) {
         List<ObjectBO> list = new ArrayList<>(CollUtil.isNotEmpty(labelInfos) ? labelInfos.size() : 0);
         for (PointCloudDetectionObject labelInfo : labelInfos) {

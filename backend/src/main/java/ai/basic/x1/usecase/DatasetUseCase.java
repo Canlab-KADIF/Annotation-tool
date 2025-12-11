@@ -41,6 +41,12 @@ import java.util.stream.Collectors;
 import static ai.basic.x1.entity.enums.DatasetTypeEnum.IMAGE;
 import static ai.basic.x1.util.Constants.PAGE_SIZE_100;
 
+import ai.basic.x1.adapter.port.dao.FileDAO;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
+import cn.hutool.core.collection.CollUtil;
+
 /**
  * @author fyb
  * @date 2022/2/16 15:03
@@ -88,8 +94,28 @@ public class DatasetUseCase {
     @Autowired
     private DataAnnotationClassificationDAO dataAnnotationClassificationDAO;
 
+    @Autowired
+    private DataAnnotationRecordDAO dataAnnotationRecordDAO;
+
+    @Autowired
+    private UploadRecordDAO uploadRecordDAO;
+    
+    @Autowired
+    private ExportRecordDAO exportRecordDAO;
+
+    @Autowired
+    private ModelDatasetResultDAO modelDatasetResultDAO;
+
+    @Autowired
+    private ModelRunRecordDAO modelRunRecordDAO;
+
     @Value("${file.tempPath:/tmp/xtreme1/}")
     private String tempPath;
+
+    @Autowired 
+    private FileDAO fileDAO;
+    @Autowired
+    private FileUseCase fileUseCase;
 
     private static final ExecutorService executorService = ThreadUtil.newExecutor(1);
 
@@ -195,24 +221,127 @@ public class DatasetUseCase {
     /**
      * Delete dataset
      *
-     * @param id Dataset id
+     * @param dataset_id Dataset id
      */
-    public void delete(Long id) {
-        var task = datasetDAO.getById(id);
-        if (ObjectUtil.isNull(task)) {
+    public void delete(Long dataset_id) {
+        log.info("delete dataset is executed!");
+        var dataset = datasetDAO.getById(dataset_id);
+        if (ObjectUtil.isNull(dataset)) {
             throw new UsecaseException(UsecaseCode.DATASET_NOT_FOUND);
         }
-        datasetDAO.removeById(id);
 
-        executorService.execute(Objects.requireNonNull(TtlRunnable.get(() -> {
-            dataInfoDAO.getBaseMapper().deleteByDatasetId(id);
-            var dataAnnotationObjectLambdaUpdateWrapper = Wrappers.lambdaUpdate(DataAnnotationObject.class);
-            dataAnnotationObjectLambdaUpdateWrapper.eq(DataAnnotationObject::getDatasetId, id);
-            dataAnnotationObjectDAO.remove(dataAnnotationObjectLambdaUpdateWrapper);
-            var dataAnnotationClassificationLambdaUpdateWrapper = Wrappers.lambdaUpdate(DataAnnotationClassification.class);
-            dataAnnotationClassificationLambdaUpdateWrapper.eq(DataAnnotationClassification::getDatasetId, id);
-            dataAnnotationClassificationDAO.remove(dataAnnotationClassificationLambdaUpdateWrapper);
-        })));
+        var dataInfoQueryBO = new DataInfoQueryBO();
+        dataInfoQueryBO.setDatasetId(dataset_id);
+        dataInfoQueryBO.setPageNo(1);
+        dataInfoQueryBO.setPageSize(Integer.MAX_VALUE);
+        dataInfoQueryBO.setDatasetType(dataset.getType());
+        List<Long> dataIds = dataInfoUseCase.findExportDataIds(dataInfoQueryBO);
+        log.info("Collected dataIds for deletion: {}", dataIds);
+        if (!CollectionUtil.isEmpty(dataIds)) {
+            var originalFileIds = new ArrayList<Long>();
+            for (Long dataId : dataIds) {
+                try {
+                    var dataInfo = dataInfoUseCase.findById(dataId);
+                    var content = dataInfo.getContent();
+                    if (CollectionUtil.isNotEmpty(content)) {
+                        var ids = dataInfoUseCase.collectFileIds(content);
+                        originalFileIds.addAll(ids);
+                    } else {
+                        log.info("Content is empty for dataId: {}", dataId);
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to load dataInfo for dataId: {}", dataId, e);
+                }
+            }
+            List<FileBO> relatedFiles = fileUseCase.findRelatedFilesByRelationIds(originalFileIds);
+            List<Long> relatedFileIds = relatedFiles.stream()
+                                                    .map(FileBO::getId)
+                                                    .collect(Collectors.toList());        
+
+            // export_record 및 실제 생성된 zip파일 모두 삭제
+            List<ExportRecord> exportRecords = exportRecordDAO.findAllByDatasetId(dataset_id);
+            List<Long> exportFileIds = exportRecords.stream()
+                            .map(ExportRecord::getFileId)
+                            .filter(Objects::nonNull)
+                            .collect(Collectors.toList());
+            
+            var allFileIds = new ArrayList<Long>();
+            allFileIds.addAll(originalFileIds);
+            allFileIds.addAll(relatedFileIds);
+            allFileIds.addAll(exportFileIds);
+
+            // 중복 제거
+            Set<Long> uniqueFileIds = new HashSet<>(allFileIds);
+            allFileIds = new ArrayList<>(uniqueFileIds);
+            List<Long> finalAllFileIds = allFileIds;
+            
+            // upload_record 및 원본 zip 파일 삭제
+            List<UploadRecord> uploadRecords = uploadRecordDAO.findAllByDatasetId(dataset_id);
+            List<String> uploadFileUrls = uploadRecords.stream()
+                            .map(UploadRecord::getFileUrl)
+                            .filter(Objects::nonNull)
+                            .collect(Collectors.toList());
+            
+            executorService.execute(Objects.requireNonNull(TtlRunnable.get(() -> {
+                // 1. Delete file data related dataset_id 
+                if (CollUtil.isNotEmpty(finalAllFileIds)) {
+                    try {
+                        fileUseCase.deleteByIds(finalAllFileIds); // MinIO + file 테이블 삭제
+                    } catch (Exception e) {
+                        log.warn("Failed to delete files by fileIds: {}", finalAllFileIds, e);
+                    }
+                }
+                // 2. Delete file data related dataset_id 
+                if (CollUtil.isNotEmpty(uploadFileUrls)) {
+                    try {
+                        fileUseCase.deleteByUrls(uploadFileUrls); // MinIO + file 테이블 삭제
+                    } catch (Exception e) {
+                        log.warn("Failed to delete files by fileUrls: {}", uploadFileUrls, e);
+                    }
+                }
+            })));
+        }
+
+        // Delete annotation object data related dataset_id 
+        dataAnnotationObjectDAO.remove(
+            Wrappers.lambdaUpdate(DataAnnotationObject.class)
+                    .eq(DataAnnotationObject::getDatasetId, dataset_id));
+        log.info("dataAnnotationObject removed!");
+        // Delete annotation classification data related dataset_id 
+        dataAnnotationClassificationDAO.remove(
+            Wrappers.lambdaUpdate(DataAnnotationClassification.class)
+                    .eq(DataAnnotationClassification::getDatasetId, dataset_id));
+        log.info("dataAnnotationClassification removed!");
+        // Delete annotation record data related dataset_id 
+        dataAnnotationRecordDAO.remove(
+            Wrappers.lambdaUpdate(DataAnnotationRecord.class)
+                    .eq(DataAnnotationRecord::getDatasetId, dataset_id));
+        log.info("dataAnnotationRecord removed!");
+        // Delete export_record data related dataset_id 
+        exportRecordDAO.remove(
+            Wrappers.lambdaUpdate(ExportRecord.class)
+                    .eq(ExportRecord::getDatasetId, dataset_id));
+        log.info("exportRecord removed!");
+        // Delete upload_record data related dataset_id 
+        uploadRecordDAO.remove(
+            Wrappers.lambdaUpdate(UploadRecord.class)
+                    .eq(UploadRecord::getDatasetId, dataset_id));
+        log.info("uploadRecord removed!");
+        // Delete model_dataset_result data related dataset_id
+        modelDatasetResultDAO.remove(
+            Wrappers.lambdaUpdate(ModelDatasetResult.class)
+                    .eq(ModelDatasetResult::getDatasetId, dataset_id)
+        );
+        // Delete model run record data related dataset_id
+        modelRunRecordDAO.remove(
+            Wrappers.lambdaUpdate(ModelRunRecord.class)
+                    .eq(ModelRunRecord::getDatasetId, dataset_id)
+        );
+        log.info("model run record removed!");
+        // Delete data_info, dataset related dataset_id
+        dataInfoDAO.getBaseMapper().deleteByDatasetId(dataset_id);
+        datasetDAO.removeById(dataset_id);
+        log.info("datainfo, dataset removed!");        
     }
 
     /**

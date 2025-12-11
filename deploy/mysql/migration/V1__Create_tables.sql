@@ -106,7 +106,7 @@ CREATE TABLE `data_annotation_object`
     `data_id`          bigint(20)                            DEFAULT NULL COMMENT 'Data ID',
     `class_id`         bigint(20)                            DEFAULT NULL COMMENT 'Class ID',
     `class_attributes` json                                  DEFAULT NULL COMMENT 'Class Attributes',
-    `source_type`      enum ('DATA_FLOW','IMPORTED','MODEL') DEFAULT 'DATA_FLOW' COMMENT 'Source type',
+    `source_type` enum ('DATA_FLOW','IMPORTED','MODEL','ROS', 'GT') DEFAULT 'DATA_FLOW' COMMENT 'Source type',
     `source_id`        bigint(20)                            DEFAULT '-1' COMMENT 'Source ID',
     `created_at`       datetime                              DEFAULT CURRENT_TIMESTAMP COMMENT 'Create time',
     `created_by`       bigint(20)                            DEFAULT NULL COMMENT 'Creator id',
@@ -315,6 +315,7 @@ DROP TABLE IF EXISTS `export_record`;
 CREATE TABLE `export_record`
 (
     `id`            bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'Primary key',
+    `dataset_id`    bigint(20)                                                                                     DEFAULT NULL COMMENT 'Dataset id',
     `serial_number` bigint(40) NOT NULL COMMENT 'Serial number',
     `file_id`       bigint(20)                                                                                     DEFAULT NULL COMMENT 'File id',
     `file_name`     varchar(100)                                                                                   DEFAULT NULL COMMENT 'File name',
@@ -471,7 +472,7 @@ CREATE TABLE `model_run_record`
     `model_version`       varchar(255)                                                                                                           DEFAULT NULL COMMENT 'Model version',
     `run_no`              varchar(20)                                                                                                   NOT NULL COMMENT 'Serial number(For interface display)',
     `dataset_id`          bigint(20)                                                                                                    NOT NULL COMMENT 'Dataset id',
-    `status`              enum ('STARTED','RUNNING','SUCCESS','FAILURE','SUCCESS_WITH_ERROR') CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT 'Model running status',
+    `status`              enum ('STARTED','RUNNING','SAVING','SUCCESS','FAILURE','SUCCESS_WITH_ERROR') CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT 'Model running status',
     `error_reason`        text COMMENT 'Model run error reason',
     `result_filter_param` json                                                                                                                   DEFAULT NULL COMMENT 'Model results filtering parameters',
     `data_filter_param`   json                                                                                                                   DEFAULT NULL COMMENT 'Data filtering parameters',
@@ -516,6 +517,7 @@ DROP TABLE IF EXISTS `upload_record`;
 CREATE TABLE `upload_record`
 (
     `id`                   bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'Primary key',
+    `dataset_id`           bigint(20)                                                                      DEFAULT NULL COMMENT 'Dataset id',
     `serial_number`        bigint(40) NOT NULL COMMENT 'Serial number',
     `file_url`             varchar(1000)                                                                              DEFAULT NULL COMMENT 'File url',
     `file_name`            varchar(255)                                                                               DEFAULT NULL COMMENT 'File name',

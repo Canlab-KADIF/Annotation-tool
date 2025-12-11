@@ -25,6 +25,7 @@ import cn.hutool.core.util.ZipUtil;
 import cn.hutool.http.HttpUtil;
 import cn.hutool.json.JSONConfig;
 import cn.hutool.json.JSONUtil;
+import cn.hutool.json.JSON;
 import com.alibaba.ttl.TtlRunnable;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Assert;
@@ -41,6 +42,8 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.Files;
 import java.security.InvalidKeyException;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
@@ -56,6 +59,10 @@ import java.util.function.Function;
 import java.util.regex.*;
 
 import java.io.InputStream;
+import java.io.OutputStream;
+import cn.hutool.http.HttpRequest;
+
+import cn.hutool.http.HttpResponse;
 import cn.hutool.http.HttpRequest;
 
 /**
@@ -83,6 +90,9 @@ public class ExportUseCase {
     private FileUseCase fileUseCase;
 
     @Autowired
+    protected UploadUseCase uploadUseCase;
+
+    @Autowired
     private DataInfoUseCase dataInfoUseCase;
 
     @Value("${file.tempPath:/tmp/xtreme1/}")
@@ -97,19 +107,22 @@ public class ExportUseCase {
      *
      * @return serial number
      */
-    public Long createExportRecord(String fileName) {
+    public Long createExportRecord(String fileName, Long dataset_id) {
         var serialNumber = IdUtil.getSnowflakeNextId();
         var exportRecord = ExportRecord.builder()
                 .serialNumber(serialNumber)
                 .fileName(fileName)
+                .datasetId(dataset_id)
                 .status(ExportStatusEnum.GENERATING).build();
         exportRecordDAO.saveOrUpdate(exportRecord);
         return serialNumber;
     }
 
 
-    public <Q extends BaseQueryBO> Long asyncExportDataZip(String fileName, Long serialNumber, Map<Long, String> classMap, Map<Long, String> resultMap,
-                                                           Q query, Function<Q, List<Long>> fun, Function4<List<Long>, Q, Map<Long, String>, Map<Long, String>, List<DataExportBO>> processData) {
+    public <Q extends BaseQueryBO> Long asyncExportDataZip(String fileName, Long serialNumber, 
+                                                            Map<Long, String> classMap, Map<Long, String> resultMap,
+                                                           Q query, Function<Q, List<Long>> fun, Function4<List<Long>, Q,
+                                                            Map<Long, String>, Map<Long, String>, List<DataExportBO>> processData) {
         var lambdaQueryWrapper = new LambdaQueryWrapper<ExportRecord>();
         lambdaQueryWrapper.in(ExportRecord::getSerialNumber, serialNumber);
         var exportRecord = exportRecordDAO.getOne(lambdaQueryWrapper);
@@ -119,8 +132,10 @@ public class ExportUseCase {
         return serialNumber;
     }
 
-    private <Q extends BaseQueryBO> void getDataAndUpload(ExportRecord record, String srcPath, Map<Long, String> classMap, Map<Long, String> resultMap, Q query,
-                                                          Function<Q, List<Long>> fun, Function4<List<Long>, Q, Map<Long, String>, Map<Long, String>, List<DataExportBO>> processData) {
+    private <Q extends BaseQueryBO> void getDataAndUpload(ExportRecord record, String srcPath, 
+                                                        Map<Long, String> classMap, Map<Long, String> resultMap, Q query,
+                                                        Function<Q, List<Long>> fun, Function4<List<Long>, Q, Map<Long, String>,
+                                                        Map<Long, String>, List<DataExportBO>> processData) {
         var rootPath = String.format("%s/%s", record.getCreatedBy(),
                 TemporalAccessorUtil.format(OffsetDateTime.now(), DatePattern.PURE_DATETIME_PATTERN));
         var exportRecordBOBuilder = ExportRecordBO.builder()
@@ -129,14 +144,21 @@ public class ExportUseCase {
                 .updatedAt(OffsetDateTime.now());
 
         var dataIds = fun.apply(query);
+        log.info("Export 대상 dataIds: {}", dataIds);
         if (CollUtil.isEmpty(dataIds)) {
             exportRecordBOBuilder.status(ExportStatusEnum.FAILED);
             return;
         }
         AtomicInteger i = new AtomicInteger(0);
         var dataIdList = ListUtil.partition(dataIds, 1000);
+        log.info("getDataAndUploads src path: {}", srcPath);
+        log.info("dataIdList size: {}", dataIdList.size());
+        long startTime = System.currentTimeMillis(); // 시작 시간
+
         dataIdList.forEach(subDataIds -> {
-            writeFile(subDataIds, srcPath, classMap, resultMap, query, processData);
+            log.info("subDataIds: {}", subDataIds);
+            // writeFile(subDataIds, srcPath, classMap, resultMap, query, processData);
+            writeAnnotationFiles(subDataIds, srcPath, classMap, resultMap, query, processData);
             var exportRecordBO = exportRecordBOBuilder
                     .generatedNum(i.get() * BATCH_SIZE + subDataIds.size())
                     .totalNum(dataIds.size())
@@ -145,38 +167,49 @@ public class ExportUseCase {
             exportRecordUsecase.saveOrUpdate(exportRecordBO);
             i.getAndIncrement();
         });
-        var zipPath = srcPath + ".zip";
-        File zipFile;
-        var path = String.format("%s/%s", rootPath, FileUtil.getName(zipPath));
 
-        if (DataFormatEnum.COCO.equals(query.getDataFormat())) {
-            var basePath = String.format("%s/%s", tempPath, IdUtil.fastSimpleUUID());
-            var respPath = String.format("%s/resp.json", basePath);
-            var baseOutPath = String.format("%s/%s", basePath, FileUtil.getPrefix(zipPath));
-            var outPathNew = String.format("%s/result", baseOutPath);
-            //FileUtil.move(Path.of(String.format("%s/image", srcPath)), Path.of(String.format("%s/image", baseOutPath)), true);
-            ZipUtil.zip(srcPath, zipPath, true);
-            FileUtil.mkdir(outPathNew);
-            DataFormatUtil.convert(Constants.CONVERT_EXPORT, zipPath, outPathNew, respPath);
-            if (FileUtil.exist(respPath) && UsecaseCode.OK.equals(DefaultConverter.convert(JSONUtil.readJSONObject(FileUtil.file(respPath), Charset.defaultCharset()), ApiResult.class).getCode())) {
-                zipFile = ZipUtil.zip(baseOutPath, zipPath, true);
-            } else {
-                FileUtil.del(basePath);
-                var exportRecordBO = exportRecordBOBuilder
-                        .status(ExportStatusEnum.FAILED)
-                        .updatedAt(OffsetDateTime.now())
-                        .build();
-                exportRecordUsecase.saveOrUpdate(exportRecordBO);
-                return;
-            }
-            FileUtil.del(basePath);
-        } else {
-            zipFile = ZipUtil.zip(srcPath, zipPath, true);
+        long endTime = System.currentTimeMillis(); // 종료 시간
+        double durationSec = (endTime - startTime) / 1000.0; // 초 단위 변환
+        log.info("1. 원본 zip 다운로드 및 annoation 데이터 다운로드 소요시간: {} 초", durationSec);
+        
+        startTime = System.currentTimeMillis(); // 시작 시간
+        var tarPath = srcPath + ".tar";
+        File tarFile = null;
+        var path = String.format("%s/%s", rootPath, FileUtil.getName(tarPath));
+
+        try{
+            log.info("Start archiving...");
+            tarFile = TarUtil.tar(new File(srcPath), new File(tarPath)); // 압축 없음
+            // TarUtil.tarGz(new File(srcPath), new File(tarGzPath)); // gzip 압축
         }
-        var fileBO = FileBO.builder().name(FileUtil.getName(zipPath)).originalName(FileUtil.getName(zipPath)).bucketName(minioProp.getBucketName())
-                .size(zipFile.length()).path(path).type(FileUtil.getMimeType(path)).build();
-        try {
-            minioService.uploadFile(minioProp.getBucketName(), path, FileUtil.getInputStream(zipFile), FileUtil.getMimeType(path), zipFile.length());
+        catch (Exception e){
+            logger.error("Archiving file error", e);
+        }
+
+        var fileName = FileUtil.getName(tarFile.getPath());
+        endTime = System.currentTimeMillis(); // 종료 시간
+        durationSec = (endTime - startTime) / 1000.0; // 초 단위 변환
+        log.info("2. 데이터 아카이빙 소요시간: {} 초", durationSec);
+        
+        startTime = System.currentTimeMillis(); // 시작 시간
+        var fileBO = FileBO.builder()
+                           .name(fileName)
+                           .originalName(fileName)
+                           .bucketName(minioProp.getBucketName())
+                           .size(tarFile.length())
+                           .path(path)
+                           .type(FileUtil.getMimeType(tarFile.getPath()))
+                           .build();
+
+        try{
+            minioService.uploadFile(minioProp.getBucketName(),
+                                    path, FileUtil.getInputStream(tarFile), 
+                                    FileUtil.getMimeType(path), 
+                                    tarFile.length());
+            endTime = System.currentTimeMillis(); // 종료 시간
+            durationSec = (endTime - startTime) / 1000.0; // 초 단위 변환
+            log.info("3. minio 데이터 upload 소요시간: {} 초", durationSec);
+            startTime = System.currentTimeMillis(); // 시작 시간
             var resFileBOS = fileUseCase.saveBatchFile(record.getCreatedBy(), Collections.singletonList(fileBO));
             var exportRecordBO = exportRecordBOBuilder
                     .fileId(CollectionUtil.getFirst(resFileBOS).getId())
@@ -192,12 +225,67 @@ public class ExportUseCase {
             exportRecordUsecase.saveOrUpdate(exportRecordBO);
             logger.error("Upload file error", e);
         } finally {
-            FileUtil.del(zipFile);
+            // FileUtil.del(zipFile);
+            log.info("tarFile, srcpath: {}, {}", tarFile, srcPath);
+            FileUtil.del(tarFile);
             FileUtil.del(srcPath);
         }
+        endTime = System.currentTimeMillis(); // 종료 시간
+        durationSec = (endTime - startTime) / 1000.0; // 초 단위 변환
+        log.info("4. DB에 export record upload 소요 시간: {} 초", durationSec);
     }
 
-    private <Q extends BaseQueryBO> void writeFile(List<Long> dataIds, String zipPathOr, Map<Long, String> classMap, Map<Long, String> resultMap, Q query, Function4<List<Long>, Q, Map<Long, String>, Map<Long, String>, List<DataExportBO>> processData) {
+    private String replacePresignedUrlForInternalAccess(String url) {
+        return url
+            .replace("http://localhost:8190/minio", "http://minio:9000")
+            .replace("http://127.0.0.1:8190/minio", "http://minio:9000")
+            .replace("http://host.docker.internal:8190/minio", "http://minio:9000")
+            .replace("http://ketilabel.iptime.org:8080/minio", "http://minio:9000");
+    }
+    
+    
+    private <Q extends BaseQueryBO> void writeAnnotationFiles(List<Long> dataIds, String zipPathOr, Map<Long, String> classMap, 
+                                                                                Map<Long, String> resultMap, Q query, 
+                                                                                Function4<List<Long>, Q, Map<Long, String>, 
+                                                                                Map<Long, String>, List<DataExportBO>> processData) {
+        var dataExportBOList = processData.invoke(dataIds, query, classMap, resultMap);
+        var jsonConfig = JSONConfig.create().setIgnoreNullValue(false);
+        var datasetId = ((DataInfoQueryBO) query).getDatasetId();
+        List<UploadRecordBO> recordsBO = uploadUseCase.findByDatasetId(datasetId);
+        log.info("writeAnnotationFiles, dataset id: {} ", datasetId);
+        log.info("dataExportBOList size: {}", dataExportBOList.size());
+        dataExportBOList.forEach(dataExportBO -> {
+            var sceneName = dataExportBO.getSceneName();
+            var zipPath = StrUtil.isNotEmpty(sceneName) ? String.format("%s/%s", zipPathOr, sceneName) : zipPathOr;
+            var dataExportBaseBO = dataExportBO.getData();
+            // log.info("sceneName, zipPath: {}, {} ", sceneName, zipPath);
+            if (ObjectUtil.isNotNull(dataExportBO.getResult())) {
+                for (DataResultExportBO resultBO : dataExportBO.getResult()) {
+                    var sourceName = resultBO.getSourceName(); // e.g. "ROS", "MODEL", "GROUND_TRUTH"
+                    var resultPath = String.format("%s/%s/%s/%s.json",
+                            zipPath,
+                            Constants.RESULT,
+                            sourceName != null ? sourceName : "UNKNOWN",
+                            dataExportBaseBO.getName());
+                    // FileUtil.writeString(JSONUtil.toJsonStr(resultBO, jsonConfig), resultPath, StandardCharsets.UTF_8);
+                    JSON json = JSONUtil.parse(resultBO, jsonConfig);
+                    FileUtil.writeString(JSONUtil.toJsonPrettyStr(json), resultPath, StandardCharsets.UTF_8);
+                }
+            }
+            // else {
+            //     // 결과가 없으면 빈 JSON 만들어주기
+            //     var resultPath = String.format("%s/%s/%s/%s.json",
+            //             zipPath,
+            //             Constants.RESULT,
+            //             "UNKNOWN",
+            //             dataExportBaseBO.getName());
+            //     FileUtil.writeString("{}", resultPath, StandardCharsets.UTF_8);
+            // }
+        });
+    }
+    private <Q extends BaseQueryBO> void writeFile(List<Long> dataIds, String zipPathOr, Map<Long, String> classMap, 
+                                                   Map<Long, String> resultMap, Q query, Function4<List<Long>, Q, Map<Long, String>,
+                                                   Map<Long, String>, List<DataExportBO>> processData) {
         var dataExportBOList = processData.invoke(dataIds, query, classMap, resultMap);
         var jsonConfig = JSONConfig.create().setIgnoreNullValue(false);
         dataExportBOList.forEach(dataExportBO -> {
@@ -218,7 +306,9 @@ public class ExportUseCase {
                 // lidar pcd file
                 if (CollUtil.isNotEmpty(lidarPointClouds)) {
                     for (ExportDataLidarPointCloudFileBO pcdFile : lidarPointClouds) {
-                        try (InputStream inputStream = HttpRequest.get(pcdFile.getUrl()).execute().bodyStream()) {
+                        try (InputStream inputStream = HttpRequest.get(
+                                replacePresignedUrlForInternalAccess(pcdFile.getUrl())
+                                ).execute().bodyStream()){ 
                             String fullPcdPath = String.format("%s/%s/%s/%s", zipPath, Constants.DATA, Constants.LIDAR_POINT_CLOUD, pcdFile.getFilename());
                             log.info("fullPcdPath: {}", fullPcdPath);
                             File file = new File(fullPcdPath);
@@ -232,8 +322,9 @@ public class ExportUseCase {
                 // camera jpeg file
                 if (CollUtil.isNotEmpty(cameraImages)) {
                     for (ExportDataImageFileBO imageFile : cameraImages) {
-                        try (InputStream inputStream = HttpRequest.get(imageFile.getUrl()).execute().bodyStream()) {
-                            // 
+                        try (InputStream inputStream = HttpRequest.get(
+                                replacePresignedUrlForInternalAccess(imageFile.getUrl())
+                                ).execute().bodyStream()){ 
                             Pattern pattern = Pattern.compile("camera_image_\\d+");
                             Matcher matcher = pattern.matcher(imageFile.getZipPath());
                             String cameraDir;
@@ -257,7 +348,9 @@ public class ExportUseCase {
                 // camera calibration file
                 if (cameraConfig != null) {
                     // for (ExportDataImageFileBO cameraConfigFile : cameraConfigs) {
-                    try (InputStream inputStream = HttpRequest.get(cameraConfig.getUrl()).execute().bodyStream()) {
+                    try (InputStream inputStream = HttpRequest.get(
+                            replacePresignedUrlForInternalAccess(cameraConfig.getUrl())
+                            ).execute().bodyStream()){
                         String cameraConfigFilePath = String.format("%s/%s/%s/%s", zipPath, Constants.DATA, Constants.CAMERA_CONFIG, cameraConfig.getFilename());
                         log.info("CameraConfigFilePath: {}", cameraConfigFilePath);
                         File file = new File(cameraConfigFilePath);

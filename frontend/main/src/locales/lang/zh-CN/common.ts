@@ -78,6 +78,7 @@ export default {
     success: '成功',
     failure: '失败',
     running: '运行中',
+    saving: '保存中',
     successWithError: '成功但有错误',
   },
   all: '所有',

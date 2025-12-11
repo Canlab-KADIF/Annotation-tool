@@ -35,7 +35,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.Objects;
 
+import ai.basic.x1.adapter.port.minio.MinioService;
+import ai.basic.x1.adapter.port.minio.MinioProp;
+import ai.basic.x1.util.DecompressionFileUtils;
 /**
  * @author fyb
  * @date 2022/2/21 13:47
@@ -72,6 +76,11 @@ public class DataInfoController extends BaseDatasetController {
 
     @Autowired
     protected UploadDataUseCase uploadDataUseCase;
+
+    @Autowired
+    protected MinioProp minioProp;
+    @Autowired
+    private MinioService minioService;
 
     @PostMapping("upload")
     public String upload(@RequestBody @Validated DataInfoUploadDTO dto, @LoggedUser LoggedUserDTO userDTO) throws IOException {
@@ -194,6 +203,30 @@ public class DataInfoController extends BaseDatasetController {
                                                 @RequestParam(value = "datasetId") Long datasetId, @LoggedUser LoggedUserDTO userDTO) {
         var presignedUrlBO = dataInfoUsecase.generatePresignedUrl(fileName, datasetId, userDTO.getId());
         return DefaultConverter.convert(presignedUrlBO, PresignedUrlDTO.class);
+    }
+
+    @GetMapping("downloadOriginalZip")
+    public ApiResult<List<String>> downloadOriginalZip(@RequestParam Long datasetId) {
+        List<UploadRecordBO> recordsBO = uploadUseCase.findByDatasetId(datasetId);
+        log.info("downloadOriginalZip func recordsBO size: {}", recordsBO.size());
+        List<String> presignedList = recordsBO.stream().map(recordBO -> {
+                    String objectName = recordBO.getFileUrl();
+                    try {
+                        String presigned = minioService.generatePresignedDownloadUrl(
+                            minioProp.getBucketName(),
+                            objectName
+                        );
+                        log.info("presigned delivered to frontend: {}", presigned);
+                        return presigned;
+                    } catch (Exception e) {
+                        log.error("Failed to generate presigned URL for object: {}", objectName, e);
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        log.info("downloadOriginalZip download link: {}", presignedList);
+        return new ApiResult<>(presignedList);
     }
 
     @GetMapping("export")

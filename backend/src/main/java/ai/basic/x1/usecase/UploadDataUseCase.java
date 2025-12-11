@@ -156,7 +156,7 @@ public class UploadDataUseCase {
      */
     @Transactional(rollbackFor = RuntimeException.class)
     public Long upload(DataInfoUploadBO dataInfoUploadBO) {
-        var uploadRecordBO = uploadUseCase.createUploadRecord(dataInfoUploadBO.getFileUrl());
+        var uploadRecordBO = uploadUseCase.createUploadRecord(dataInfoUploadBO.getFileUrl(), dataInfoUploadBO.getDatasetId());
         var boo = DecompressionFileUtils.validateUrl(dataInfoUploadBO.getFileUrl());
         if (!boo) {
             uploadUseCase.updateUploadRecordStatus(uploadRecordBO.getId(), FAILED, DATASET_DATA_FILE_URL_ERROR.getMessage());
@@ -572,7 +572,8 @@ public class UploadDataUseCase {
             var boo = this.validateFilenameByType(f, datasetType);
             if (boo) {
                 var fcList = Arrays.stream(f.listFiles()).filter(fc -> (this.validateFileFormat(fc, datasetType) &&
-                        this.getFilename(fc).equals(dataName))).collect(Collectors.toList());
+                                                                (this.getFilename(fc).equals(dataName))))
+                                                                .collect(Collectors.toList());
                 var count = fcList.size();
                 switch (count) {
                     case 0:
@@ -603,7 +604,7 @@ public class UploadDataUseCase {
             return file.isDirectory() && filename.startsWith(Constants.IMAGE);
         } else {
             return file.isDirectory() && (filename.startsWith(Constants.CAMERA_IMAGE) || filename.startsWith(LIDAR_POINT_CLOUD) ||
-                    filename.equalsIgnoreCase(CAMERA_CONFIG));
+                    filename.equalsIgnoreCase(CAMERA_CONFIG) || filename.startsWith(Constants.META_DATA));
         }
     }
 
@@ -657,7 +658,8 @@ public class UploadDataUseCase {
 
         // GT와 ROS 경로들 정의
         List<Pair<String, DataAnnotationObjectSourceTypeEnum>> resultSources = List.of(
-            Pair.of("result", DataAnnotationObjectSourceTypeEnum.MODEL),
+            // Pair.of("result", DataAnnotationObjectSourceTypeEnum.MODEL),
+            Pair.of("result", DataAnnotationObjectSourceTypeEnum.GT),
             Pair.of("perception", DataAnnotationObjectSourceTypeEnum.ROS)
         );
         for (var source : resultSources) {
@@ -889,7 +891,7 @@ public class UploadDataUseCase {
             var files = new ArrayList<File>();
             for (FileBO fileBO : fileBOS) {
                 var mimeType = fileBO.getType();
-                var savePath = tempPath + fileBO.getPath().replace(rootPath, "");
+                var savePath = tempPath + "/" + fileBO.getPath().substring(rootPath.length());
                 if (IMAGE_DATA_TYPE.contains(mimeType)) {
                     var filePath = fileBO.getPath();
                     var basePath = filePath.substring(0, filePath.lastIndexOf(SLANTING_BAR) + 1);

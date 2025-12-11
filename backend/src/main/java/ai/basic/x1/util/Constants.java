@@ -56,6 +56,7 @@ public interface Constants {
      */
     String SCENE = "scene_";
 
+    String META_DATA = "meta_data";
     /**
      * point_cloud
      */

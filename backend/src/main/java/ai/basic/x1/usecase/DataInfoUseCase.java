@@ -41,6 +41,8 @@ import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
+import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONArray;
 
 import static ai.basic.x1.entity.enums.DatasetTypeEnum.IMAGE;
 import static ai.basic.x1.usecase.exception.UsecaseCode.DATASET_NOT_FOUND;
@@ -100,6 +102,12 @@ public class DataInfoUseCase {
     private ModelDataResultDAO modelDataResultDAO;
 
     @Autowired
+    private ModelDatasetResultDAO modelDatasetResultDAO;
+
+    @Autowired
+    private ModelRunRecordDAO modelRunRecordDAO;
+    
+    @Autowired
     private DatasetSimilarityJobUseCase datasetSimilarityJobUseCase;
 
     @Autowired
@@ -113,6 +121,12 @@ public class DataInfoUseCase {
 
     @Autowired
     private ModelRunRecordUseCase modelRunRecordUseCase;
+
+    @Autowired
+    private ExportRecordDAO exportRecordDAO;
+
+    @Autowired
+    private UploadRecordDAO uploadRecordDAO;
 
     @Value("${export.data.version}")
     private String version;
@@ -226,26 +240,125 @@ public class DataInfoUseCase {
         if (count > 0) {
             throw new UsecaseException(UsecaseCode.DATASET_DATA_OTHERS_ANNOTATING);
         }
+        var dataset = datasetDAO.getById(datasetId);
+        var dataInfoQueryBO = new DataInfoQueryBO();
+        dataInfoQueryBO.setDatasetId(datasetId);
+        dataInfoQueryBO.setPageNo(1);
+        dataInfoQueryBO.setPageSize(Integer.MAX_VALUE);
+        dataInfoQueryBO.setDatasetType(dataset.getType());
+        List<Long> dataIds = findExportDataIds(dataInfoQueryBO);
+        log.info("deleteBatch ids3: {}", dataIds);
+        // a. DataInfo content에서 파일 수집 후 삭제
+        List<Long> originalFileIds = new ArrayList<>();
+        for (Long dataId : dataIds) {
+            try {
+                var dataInfo = findById(dataId);
+                var content = dataInfo.getContent();
+                if (CollectionUtil.isNotEmpty(content)) {
+                    var file_ids = collectFileIds(content);
+                    originalFileIds.addAll(file_ids);
+                } else {
+                    log.info("Content is empty for dataId: {}", dataId);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to load dataInfo for dataId: {}", dataId, e);
+            }
+        }
+        
+        // log.info("originalFileIds1: {}: ", originalFileIds);
+        List<Long> relatedFileIds = new ArrayList<>();
+        // originalFileIds가 비어있지 않은 경우에만 관련 파일 조회
+        if (CollUtil.isNotEmpty(originalFileIds)) {
+            List<FileBO> relatedFiles = fileUseCase.findRelatedFilesByRelationIds(originalFileIds);
+            relatedFileIds = relatedFiles.stream()
+                                            .map(FileBO::getId)
+                                            .collect(Collectors.toList());
+        }
 
-        var dataInfoLambdaUpdateWrapper = Wrappers.lambdaUpdate(DataInfo.class);
-        dataInfoLambdaUpdateWrapper.setSql("del_unique_key=id,is_deleted=1");
-        dataInfoLambdaUpdateWrapper.eq(DataInfo::getDatasetId, datasetId);
-        dataInfoLambdaUpdateWrapper.nested(wq -> wq.in(DataInfo::getId, ids)
-                .or()
-                .in(DataInfo::getParentId, ids));
-        dataInfoDAO.update(dataInfoLambdaUpdateWrapper);
+        // export_record 및 실제 생성된 zip파일 모두 삭제
+        List<ExportRecord> exportRecords = exportRecordDAO.findAllByDatasetId(datasetId);
+        List<Long> exportFileIds = exportRecords.stream()
+                        .map(ExportRecord::getFileId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList());
 
-        executorService.execute(Objects.requireNonNull(TtlRunnable.get(() -> {
-            var dataAnnotationObjectLambdaUpdateWrapper = Wrappers.lambdaUpdate(DataAnnotationObject.class);
-            dataAnnotationObjectLambdaUpdateWrapper.eq(DataAnnotationObject::getDatasetId, datasetId);
-            dataAnnotationObjectLambdaUpdateWrapper.in(DataAnnotationObject::getDataId, ids);
-            dataAnnotationObjectDAO.remove(dataAnnotationObjectLambdaUpdateWrapper);
-            var dataAnnotationClassificationLambdaUpdateWrapper = Wrappers.lambdaUpdate(DataAnnotationClassification.class);
-            dataAnnotationClassificationLambdaUpdateWrapper.eq(DataAnnotationClassification::getDatasetId, datasetId);
-            dataAnnotationClassificationLambdaUpdateWrapper.in(DataAnnotationClassification::getDataId, ids);
-            dataAnnotationClassificationDAO.remove(dataAnnotationClassificationLambdaUpdateWrapper);
-            datasetSimilarityJobUseCase.submitJob(datasetId);
-        })));
+        var allFileIds = new ArrayList<Long>();
+        allFileIds.addAll(originalFileIds);
+        allFileIds.addAll(relatedFileIds);
+        allFileIds.addAll(exportFileIds);
+
+        // 중복 제거
+        Set<Long> uniqueFileIds = new HashSet<>(allFileIds);
+        allFileIds = new ArrayList<>(uniqueFileIds);
+        List<Long> finalAllFileIds = allFileIds;
+        // log.info("finalAllFileIds: {} ", finalAllFileIds);
+                                        
+        if (CollUtil.isNotEmpty(finalAllFileIds)) {
+            try {
+                log.info("finalAllFileIds: {}", finalAllFileIds);
+                fileUseCase.deleteByIds(finalAllFileIds); // MinIO + file 테이블 삭제
+            } catch (Exception e) {
+                log.warn("Failed to delete files by fileIds: {}", finalAllFileIds, e);
+            }
+        }
+
+        // upload_record 및 원본 zip 파일 삭제
+        List<UploadRecord> uploadRecords = uploadRecordDAO.findAllByDatasetId(datasetId);
+        List<String> uploadFileUrls = uploadRecords.stream()
+                        .map(UploadRecord::getFileUrl)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList());
+
+        if (CollUtil.isNotEmpty(uploadFileUrls)) {
+            try {
+                fileUseCase.deleteByUrls(uploadFileUrls); // MinIO + file 테이블 삭제
+            } catch (Exception e) {
+                log.warn("Failed to delete files by fileUrls: {}", uploadFileUrls, e);
+            }
+        }
+
+        // Annotation 삭제
+        dataAnnotationObjectDAO.remove(
+                Wrappers.lambdaUpdate(DataAnnotationObject.class)
+                        .eq(DataAnnotationObject::getDatasetId, datasetId)
+        );
+        
+        // ModelDataset 삭제
+        modelDatasetResultDAO.remove(
+                Wrappers.lambdaUpdate(ModelDatasetResult.class)
+                        .eq(ModelDatasetResult::getDatasetId, datasetId)
+        );
+
+        // Delete model run record data related dataset_id
+        modelRunRecordDAO.remove(
+            Wrappers.lambdaUpdate(ModelRunRecord.class)
+                    .eq(ModelRunRecord::getDatasetId, datasetId)
+        );
+
+        // dataAnnotationRecordDAO 삭제
+        dataAnnotationRecordDAO.remove(
+                Wrappers.lambdaUpdate(DataAnnotationRecord.class)
+                        .eq(DataAnnotationRecord::getDatasetId, datasetId)
+        );
+
+        // ExportRecord 삭제
+        exportRecordDAO.remove(
+                Wrappers.lambdaUpdate(ExportRecord.class)
+                        .eq(ExportRecord::getDatasetId, datasetId)
+        );
+
+        // Delete upload_record data related dataset_id 
+        uploadRecordDAO.remove(
+                Wrappers.lambdaUpdate(UploadRecord.class)
+                        .eq(UploadRecord::getDatasetId, datasetId)
+        );
+
+        // e. DataInfo 삭제
+        dataInfoDAO.getBaseMapper().deleteByDatasetId(datasetId);
+
+        // f. 유사도 작업 갱신
+        // datasetSimilarityJobUseCase.submitJob(datasetId);
+
     }
 
     /**
@@ -514,8 +627,8 @@ public class DataInfoUseCase {
      */
     public Long export(DataInfoQueryBO dataInfoQueryBO) {
         var dataset = datasetDAO.getById(dataInfoQueryBO.getDatasetId());
-        var fileName = String.format("%s-%s.zip", dataset.getName(), TemporalAccessorUtil.format(OffsetDateTime.now(), DatePattern.PURE_DATETIME_PATTERN));
-        var serialNumber = exportUseCase.createExportRecord(fileName);
+        var fileName = String.format("%s-%s.tar", dataset.getName(), TemporalAccessorUtil.format(OffsetDateTime.now(), DatePattern.PURE_DATETIME_PATTERN));
+        var serialNumber = exportUseCase.createExportRecord(fileName, dataInfoQueryBO.getDatasetId());
         dataInfoQueryBO.setPageNo(PAGE_NO);
         dataInfoQueryBO.setPageSize(PAGE_SIZE);
         dataInfoQueryBO.setDatasetType(dataset.getType());
@@ -865,12 +978,21 @@ public class DataInfoUseCase {
         }
         fileNodeBOList.forEach(fileNodeBO -> {
             if (fileNodeBO.getType().equals(FILE)) {
-                fileIds.add(fileNodeBO.getFileId());
+                if (fileNodeBO.getFileId() != null) {  // null 체크 추가
+                    fileIds.add(fileNodeBO.getFileId());
+                }
+                else{
+                    log.warn("file id is null, file id: {}", fileNodeBO.getName());
+                }
             } else {
                 fileIds.addAll(getFileIds(fileNodeBO.getFiles()));
             }
         });
         return fileIds;
+    }
+
+    public List<Long> collectFileIds(List<DataInfoBO.FileNodeBO> content) {
+        return getFileIds(content);
     }
 
     /**
@@ -908,9 +1030,60 @@ public class DataInfoUseCase {
                     var dataResultExportBO = DataResultExportBO.builder().dataId(dataId).version(version).build();
                     var objects = new ArrayList<DataResultObjectExportBO>();
                     objectSourceList.forEach(o -> {
-                        var dataResultObjectExportBO = DefaultConverter.convert(o.getClassAttributes(), DataResultObjectExportBO.class);
-                        dataResultObjectExportBO.setClassName(classMap.get(o.getClassId()));
-                        dataResultObjectExportBO.setClassId(o.getClassId());
+                        var classAttrs = o.getClassAttributes();
+                        JSONObject contourAttrs = (JSONObject) classAttrs.get("contour");
+                        if (contourAttrs == null) {
+                            log.warn("contourAttrs is null, dataId: {}, objectId: {}", dataId, o.getId());
+                            contourAttrs = new JSONObject();
+                        }
+                        var dataResultObjectExportBO = DefaultConverter.convert(classAttrs, DataResultObjectExportBO.class);
+                        // contour 
+                        JSONObject contour = new JSONObject();
+                        if (contourAttrs.get("pointN") != null)
+                            contour.put("pointN", contourAttrs.get("pointN"));
+                        if (contourAttrs.get("size3D") != null) 
+                            contour.put("size3D", contourAttrs.get("size3D"));
+                        if (contourAttrs.get("center3D") != null) 
+                            contour.put("center3D", contourAttrs.get("center3D"));
+                        if (contourAttrs.get("rotation3D") != null) 
+                            contour.put("rotation3D", contourAttrs.get("rotation3D"));
+                        if (contourAttrs.get("points") != null) {
+                            contour.put("points", contourAttrs.get("points"));
+                        } else {
+                            contour.put("points", new JSONArray());
+                        }                        
+                        dataResultObjectExportBO.setContour(contour);
+
+                        // confidence
+                        Object confObj = classAttrs.get("confidence");
+                        if (confObj != null) {
+                            if (confObj instanceof BigDecimal) {
+                                dataResultObjectExportBO.setModelConfidence((BigDecimal) confObj);
+                            } else if (confObj instanceof Number) {  // Double, Integer 등
+                                dataResultObjectExportBO.setModelConfidence(BigDecimal.valueOf(((Number) confObj).doubleValue()));
+                            } else if (confObj instanceof String) {
+                                dataResultObjectExportBO.setModelConfidence(new BigDecimal((String) confObj));
+                            } else {
+                                dataResultObjectExportBO.setModelConfidence(BigDecimal.ZERO); // fallback
+                            }
+                        }
+                        // classId 매핑
+                        Object modelClassName = classAttrs.get("className");
+                        if (modelClassName == null) {
+                            modelClassName = classAttrs.get("modelClass");
+                        }                        
+                        String modelClass = (modelClassName != null) ? modelClassName.toString() : null;
+                        if (modelClass != null) {
+                            if (modelClass.contains("Car")) 
+                                dataResultObjectExportBO.setClassId(Long.valueOf(1));
+                            else if (modelClass.contains("Pedestrian"))
+                                dataResultObjectExportBO.setClassId(Long.valueOf(2));
+                        }
+                        dataResultObjectExportBO.setClassName(modelClass);
+                        // dataResultObjectExportBO.setModelClass(modelClass);
+                        
+                        log.info("o.getObjects():{}", JSONUtil.toJsonStr(classAttrs));
+                        log.info("dataResultObjectExportBO:{}", JSONUtil.toJsonStr(dataResultObjectExportBO));
                         objects.add(dataResultObjectExportBO);
                     });
                     dataResultExportBO.setObjects(objects);
@@ -1045,7 +1218,7 @@ public class DataInfoUseCase {
      */
     public Long scenarioExport(ScenarioQueryBO scenarioQueryBO) {
         var fileName = String.format("%s-%s.zip", "export", TemporalAccessorUtil.format(OffsetDateTime.now(), DatePattern.PURE_DATETIME_PATTERN));
-        var serialNumber = exportUseCase.createExportRecord(fileName);
+        var serialNumber = exportUseCase.createExportRecord(fileName, scenarioQueryBO.getDatasetId());
         scenarioQueryBO.setPageNo(PAGE_NO);
         scenarioQueryBO.setPageSize(PAGE_SIZE_100);
         var datasetClassBOList = datasetClassUseCase.findByIds(scenarioQueryBO.getDatasetId(), scenarioQueryBO.getClassIds());

@@ -236,7 +236,7 @@ public class ModelUseCase {
                 .resultFilterParam(modelRunBO.getResultFilterParam())
                 .dataCount(totalDataNum).build();
         modelRunRecordDAO.save(modelRunRecord);
-        this.sendModelMessageAsync(modelRunRecord, modelBO, totalDataNum, dataIds);
+        this.sendModelWithAllDatasAsync(modelRunRecord, modelBO, totalDataNum, dataIds);
     }
 
     private void checkDatasetType(DatasetTypeEnum datasetType, ModelDatasetTypeEnum modelDatasetType) {
@@ -271,6 +271,7 @@ public class ModelUseCase {
         boolean updateResult = modelRunRecordDAO.update(ModelRunRecord.builder().build(), Wrappers.lambdaUpdate(ModelRunRecord.class)
                 .set(ModelRunRecord::getDataCount, totalDataNum)
                 .set(ModelRunRecord::getStatus, RunStatusEnum.STARTED)
+                .set(ModelRunRecord::getErrorReason, "")
                 .eq(ModelRunRecord::getId, modelRunRecordBO.getId())
                 .in(ModelRunRecord::getStatus, RunStatusEnum.FAILURE, RunStatusEnum.SUCCESS_WITH_ERROR)
         );
@@ -280,7 +281,7 @@ public class ModelUseCase {
             modelDatasetResultDAO.remove(new LambdaUpdateWrapper<ModelDatasetResult>()
                     .eq(ModelDatasetResult::getModelSerialNo, modelRunRecord.getModelSerialNo())
             );
-            sendModelMessageAsync(modelRunRecord, modelBO, totalDataNum, modelDatasetResultList.stream().map(ModelDatasetResult::getDataId).collect(Collectors.toList()));
+            sendModelWithAllDatasAsync(modelRunRecord, modelBO, totalDataNum, modelDatasetResultList.stream().map(ModelDatasetResult::getDataId).collect(Collectors.toList()));
         } else {
             throw new UsecaseException(UsecaseCode.DATASET__MODEL_RERUN_ERROR);
         }
@@ -341,12 +342,67 @@ public class ModelUseCase {
         return streamRedisTemplate.opsForStream().add(record);
     }
 
+    public RecordId sendAllDatasMessageToMQ(List<ModelMessageBO> modelMessageList) {
+        // List → JSON 배열 문자열
+        String jsonArray = JSONUtil.toJsonStr(modelMessageList);
+    
+        ObjectRecord<String, String> record = StreamRecords.newRecord()
+                .in(Constants.DATASET_MODEL_RUN_STREAM_KEY)
+                .ofObject(jsonArray)
+                .withId(RecordId.autoGenerate());
+        return streamRedisTemplate.opsForStream().add(record);
+    }
     public RecordId sendDatasetModelMessageToMQ(ModelMessageBO modelMessageBO) {
         ObjectRecord<String, String> record = StreamRecords.newRecord()
                 .in(Constants.DATASET_MODEL_RUN_STREAM_KEY)
                 .ofObject(JSONUtil.toJsonStr(modelMessageBO))
                 .withId(RecordId.autoGenerate());
         return streamRedisTemplate.opsForStream().add(record);
+    }
+    private void sendModelWithAllDatasAsync(ModelRunRecord modelRunRecord, ModelBO modelBO, long totalDataNum, List<Long> dataIds) {
+        Assert.notNull(modelRunRecord, "modelRunRecord is null");
+        log.info("sendModelWithAllDatasAsync func start send model message. datasetId: {}, runRecodeId: {}, totalDataNum: {}",
+                modelRunRecord.getDatasetId(), modelRunRecord.getId(), totalDataNum);
+        try {
+            executorService.execute(Objects.requireNonNull(TtlRunnable.get(() -> {
+                try {
+                    AtomicInteger sendSuccessNum = new AtomicInteger();
+                    AtomicInteger insertRecordNum = new AtomicInteger(0);
+                    var modelSerialNo = modelRunRecord.getModelSerialNo();
+                    log.info("executor start. datasetId: {}, runRecodeId: {}",
+                            modelRunRecord.getDatasetId(), modelRunRecord.getId());
+
+                    modelSerialNoIncrDAO.removeModelSerialNo(modelSerialNo);
+                    modelSerialNoCountDAO.setCount(modelSerialNo, (int) totalDataNum);
+
+                    // 전체 dataIds를 한 번에 조회
+                    var dataInfoBOList = dataInfoUseCase.listByIds(dataIds, false);
+                    // log.info("sendModelWithAllDatasAsync func, total dataInfoBOList:  {}", dataInfoBOList);
+                    // log.info("sendModelWithAllDatasAsync func, total dataIds:  {}", dataIds);
+
+                    if (isNotExistModelRunRecord(modelRunRecord)) {
+                        log.error("model {} runId {} is delete.", modelBO.getModelCode(), modelRunRecord.getRunNo());
+                        return;
+                    }
+
+                    insertRecordNum.addAndGet(batchSaveModelWithAllDatasMessage(dataInfoBOList, modelRunRecord));
+                    sendSuccessNum.addAndGet(sendModelWithAllDatasMessage(
+                            convertMessageList(dataInfoBOList, modelRunRecord, modelBO)
+                    ));
+
+                    // log.info("model {} runId {} cumulative send num {}", modelBO.getModelCode(),
+                    //         modelRunRecord.getRunNo(), sendSuccessNum);
+                    // log.info("model {} runId {} finish.", modelBO.getModelCode(), modelRunRecord.getRunNo());
+                } catch (Exception e) {
+                    log.info("model {} runId {} fail. Exception:{}",
+                            modelBO.getModelCode(), modelRunRecord.getRunNo(), e);
+                }
+            }
+            )));
+        } catch (RejectedExecutionException ex) {
+            throw new UsecaseException(UsecaseCode.UNKNOWN,
+                    "The system is busy, please try again later");
+        }
     }
 
     private void sendModelMessageAsync(ModelRunRecord modelRunRecord, ModelBO modelBO, long totalDataNum, List<Long> dataIds) {
@@ -406,6 +462,13 @@ public class ModelUseCase {
         return !modelRunRecordDAO.getBaseMapper().exists(query);
     }
 
+    private int batchSaveModelWithAllDatasMessage(List<DataInfoBO> dataInfoList, ModelRunRecord modelRunRecord) {
+        var records = convertModelDatasetResultList(dataInfoList, modelRunRecord);
+        if (CollUtil.isNotEmpty(records)) {
+            modelDatasetResultDAO.insertBatch(records);
+        }
+        return CollUtil.isEmpty(records) ? 0 : records.size();
+    }
     private int batchSaveModelDatasetMessage(List<DataInfoBO> dataInfoList, ModelRunRecord modelRunRecord) {
         var records = convertModelDatasetResultList(dataInfoList, modelRunRecord);
         if (CollUtil.isNotEmpty(records)) {
@@ -456,6 +519,15 @@ public class ModelUseCase {
             messages.add(message);
         });
         return messages;
+    }
+    private int sendModelWithAllDatasMessage(List<ModelMessageBO> modelMessageList) {
+        if (CollUtil.isEmpty(modelMessageList)) {
+            return 0;
+        }
+        AtomicInteger sendNum = new AtomicInteger(0);
+        this.sendAllDatasMessageToMQ(modelMessageList);
+        sendNum.getAndIncrement();
+        return sendNum.get();
     }
 
     private int sendModelDatasetMessage(List<ModelMessageBO> modelMessageList) {

@@ -26,6 +26,8 @@ import java.util.List;
 import static ai.basic.x1.util.Constants.MINIO;
 import static ai.basic.x1.util.Constants.SLANTING_BAR;
 
+import java.io.BufferedInputStream;
+
 /**
  * @author fyb
  * @date 2022/3/30 11:20
@@ -98,15 +100,23 @@ public class MinioService {
 
     public void uploadFileWithoutUrl(String bucketName, String fileName, InputStream inputStream, String contentType, long size) throws IOException, InvalidKeyException, InvalidResponseException, InsufficientDataException, NoSuchAlgorithmException, ServerException, InternalException, XmlParserException, ErrorResponseException {
         createBucket(bucketName);
-        //partSize:-1 is auto setting
-        long partSize = -1;
-        var putArgs = PutObjectArgs.builder()
-                .bucket(bucketName)
-                .object(fileName)
-                .stream(inputStream, size, partSize)
-                .contentType(contentType)
-                .build();
-        extendMinioClient.putObject(putArgs);
+
+        try (BufferedInputStream bufferedInputStream = new BufferedInputStream(inputStream)) {
+            //partSize:-1 is auto setting
+            // long partSize = -1;
+
+            // 파트 크기 20MB 설정 (멀티파트 업로드 시 각 파트 크기)
+            long partSize = 20 * 1024 * 1024L;
+
+            PutObjectArgs putArgs = PutObjectArgs.builder()
+                    .bucket(bucketName)
+                    .object(fileName)
+                    .stream(bufferedInputStream, size, partSize)
+                    .contentType(contentType)
+                    .build();
+
+            extendMinioClient.putObject(putArgs);
+        }
     }
 
     /**
@@ -223,6 +233,45 @@ public class MinioService {
                 .presignedUrl(preUrl).build();
     }
 
+    public String generatePresignedDownloadUrl(String bucketName, String objectName) {
+        try{
+            var builder = GetPresignedObjectUrlArgs.builder()
+                .method(Method.GET)
+                .bucket(bucketName)
+                .object(objectName)
+                .expiry(60 * 60 * 24 * 7);
+        
+            var region = extendMinioClient.getRegion(builder.build());
+            var url = extendMinioClient.getPresignedObjectUrl(builder.region(region).build());
+            var finalDownloadPath = replaceUrl(url);
+            
+            log.info("final download path: {} ", finalDownloadPath);
+            return finalDownloadPath;  // localhost:8190/minio/... 형식으로 바꾸는 함수
+        }
+        catch (Exception e) {
+            throw new RuntimeException("Failed to generate presigned GET URL", e);
+        }
+    }
+    
+    /**
+     * Delete object from MinIO
+     *
+     * @param objectName Full path of the object (e.g., xtreme1/2/7/uuid/file.zip)
+     */
+    public void removeObject(String objectName) {
+        try {
+            extendMinioClient.removeObject(
+                RemoveObjectArgs.builder()
+                    .bucket(minioProp.getBucketName())  // ← 여기서 bucket name 가져옴
+                    .object(objectName)
+                    .build()
+            );
+            log.info("Removed object from MinIO: {}", objectName);
+        } catch (Exception e) {
+            log.error("Failed to remove object from MinIO: {}", objectName, e);
+            throw new RuntimeException("MinIO delete failed", e);
+        }
+    }
 
     private String replaceUrl(String url) {
         var proto = "http";

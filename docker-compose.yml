@@ -3,14 +3,18 @@ services:
     image: nginx:1.22
     ports:
       - 8190:80
+    environment:
+      TZ: Asia/Seoul
     volumes:
       - ./deploy/nginx/conf.d/default.conf:/etc/nginx/conf.d/default.conf
+      - /etc/localtime:/etc/localtime:ro
     depends_on:
       backend:
         condition: service_healthy
   mysql:
     image: mysql:5.7
     environment:
+      TZ: Asia/Seoul  
       MYSQL_ROOT_PASSWORD: ImOxO8Lz
       MYSQL_DATABASE: xtreme1
       MYSQL_USER: xtreme1
@@ -21,6 +25,7 @@ services:
       - mysql-data:/var/lib/mysql
       - ./deploy/mysql/custom.cnf:/etc/mysql/conf.d/custom.cnf
       - ./deploy/mysql/migration:/docker-entrypoint-initdb.d
+      - /etc/localtime:/etc/localtime:ro
     healthcheck:
       test: '/usr/bin/mysql --user=xtreme1 --password=Rc4K3L6f --execute "SHOW DATABASES;"'
       interval: 10s
@@ -31,8 +36,11 @@ services:
     image: redis:6.2
     ports:
       - 8192:6379
+    environment:
+      TZ: Asia/Seoul
     volumes:
       - redis-data:/data
+      - /etc/localtime:/etc/localtime:ro
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
@@ -45,11 +53,13 @@ services:
       MINIO_ROOT_USER: admin
       MINIO_ROOT_PASSWORD: 1tQB970y
       MINIO_DEFAULT_BUCKETS: xtreme1:download
+      TZ: Asia/Seoul
     ports:
       - 8193:9000
       - 8194:9001
     volumes:
       - minio-data:/data
+      - /etc/localtime:/etc/localtime:ro
     healthcheck:
       test:
         [
@@ -74,9 +84,12 @@ services:
     # build: ./backend
     ports:
       - 8290:8080
+    environment:
+      TZ: Asia/Seoul
     volumes:
     # Using customized application.yml to override default configs.
       - ./backend/src/main/resources/application.yml:/app/config/application.yml
+      - /etc/localtime:/etc/localtime:ro
     healthcheck:
       test:
         [
@@ -105,16 +118,24 @@ services:
     # build: ./frontend
     ports:
       - 8291:80
+    environment:
+      TZ: Asia/Seoul
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
   pcd-tools:
     image: basicai/xtreme1-pcd-tools
     pull_policy: always
     ports:
       - 8295:5000
-  image-vect-visualization:
-    image: basicai/xtreme1-image-vect-visualization
-    pull_policy: always
-    ports:
-      - 8294:5000
+    environment:
+      TZ: Asia/Seoul
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+  # image-vect-visualization:
+  #   image: basicai/xtreme1-image-vect-visualization
+  #   pull_policy: never
+  #   ports:
+  #     - 8294:5000
   # image-object-detection:
   #   image: basicai/xtreme1-image-object-detection
   #   pull_policy: always
@@ -144,6 +165,24 @@ services:
     entrypoint: ["sh", "-c", "export PYTHONPATH=/home/MS3D-docker:$PYTHONPATH && cd /app/pcdet_open && python app.py ../cbgs_voxel0075_centerpoint_nds_6648.pth"]
     # entrypoint: ["sh", "-c", "cd /app/pcdet_open && python app.py cfgs/waymo_pretrained/waymo_uda_voxel_rcnn_centerhead_4xyzt_allcls.pth"]
     # entrypoint: ["python", "/app/pcdet_open/app.py", "../cbgs_voxel0075_centerpoint_nds_6648.pth"]
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin
+    restart: always
+    ports:
+      - 8195:80  # http://localhost:8195 로 접속 가능
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: ImOxO8Lz
+      TZ: Asia/Seoul
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+
 volumes:
   mysql-data:
   redis-data:

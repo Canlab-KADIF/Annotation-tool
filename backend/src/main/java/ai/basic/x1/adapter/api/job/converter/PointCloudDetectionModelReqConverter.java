@@ -61,12 +61,18 @@ public class PointCloudDetectionModelReqConverter {
             //pcd
             if (prePath.startsWith(LIDAR_POINT_CLOUD)) {
                 dataInfo.setPointCloudUrl(getFileBO(fileNodeBO.getFile()).getUrl());
-                dataInfo.setPointCloudUrl(getFileBO(fileNodeBO.getFile()).getInternalUrl());
-                // dataInfo.setPointCloudUrl(getFileBO(fileNodeBO.getFile()).getUrl());
             }
-            //cameraConfig
+            // camera calibration
             if (prePath.startsWith(CAMERA_CONFIG)) {
                 dataInfo.setCameraConfigUrl(fileNodeBO.getFile().getUrl());
+            }
+
+            // sensor metat for annotation
+            if (prePath.startsWith(META_DATA)) {
+                // log.info("META_DATA data gen!");
+                // log.info("getFileBO(fileNodeBO.getFile()): {}", getFileBO(fileNodeBO.getFile()));
+                // log.info("getFileBO-getInternalUrl: {}", getFileBO(fileNodeBO.getFile()).getInternalUrl());
+                dataInfo.setSensorMetaUrl(fileNodeBO.getFile().getUrl());
             }
         }
         if (DIRECTORY.equals(fileNodeBO.getType()) && CollUtil.isNotEmpty(fileNodeBO.getFiles())) {
